@@ -34,6 +34,29 @@ error in its popup explaining the credentials weren't found.
 
 Requires macOS 14+ and Xcode 15 / Swift 5.9+.
 
+### One-time: create a code signing identity
+
+The build signs the app with a self-signed identity so the Keychain ACL on
+`Claude Code-credentials` stays valid across rebuilds. Without this, every
+`./build-app.sh` produces a different cdhash and macOS treats it as a "new
+app" — you'd have to click **Always Allow** on every rebuild, and stale
+entries pile up in the keychain item's ACL.
+
+In **Keychain Access.app**: menu → *Certificate Assistant* → *Create a
+Certificate…*
+
+- **Name:** `ClaudeUsage Self-Signed`
+- **Identity Type:** Self Signed Root
+- **Certificate Type:** Code Signing
+- Check **Let me override defaults**, then bump **Validity Period** to
+  something long (e.g. 3650 days) — when the cert expires, codesign
+  verification fails and you'll start getting prompts again.
+
+The cert and its private key land in your login keychain. You only do this
+once per machine.
+
+### Build the app
+
 ```bash
 ./build-app.sh
 open ./ClaudeUsage.app
@@ -43,13 +66,16 @@ The script:
 - runs `swift build -c release`
 - assembles `ClaudeUsage.app/` with a proper `Info.plist` (`LSUIElement` so it
   doesn't show in the Dock)
-- ad-hoc code-signs it (so the Keychain ACL has a stable identity to remember)
+- code-signs with the `ClaudeUsage Self-Signed` identity (override via
+  `SIGN_IDENTITY=… ./build-app.sh` if you used a different cert name)
 
-For development you can also just `swift run`, but that runs the binary
-unbundled — the menubar still works (the app calls
-`NSApplication.setActivationPolicy(.accessory)`), but every fresh `swift run`
-is a different binary as far as Keychain is concerned, so you'll be prompted
-each time.
+The signature pins the Keychain ACL to the cert's hash, so the ACL entry
+survives any number of rebuilds as long as you keep using the same cert.
+
+For development you can also just `swift run`, but that produces an unsigned
+binary — the menubar still works (the app calls
+`NSApplication.setActivationPolicy(.accessory)`), but you'll be prompted on
+the first keychain read of every fresh `swift run` invocation.
 
 ## Install
 

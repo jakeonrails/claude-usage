@@ -55,10 +55,20 @@ cat >"${APP_DIR}/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-# Ad-hoc sign so the binary has a stable identity for Keychain ACL prompts.
-# (Without a stable signature, macOS treats every run as a different app and
-# re-prompts for keychain access.)
-echo "==> ad-hoc codesigning"
-codesign --force --sign - --identifier "${BUNDLE_ID}" "${APP_DIR}"
+# Sign with a self-signed identity so the Keychain ACL pins to the cert's
+# hash (not the binary's cdhash). Ad-hoc signatures are unstable across
+# rebuilds — every rebuild produces a different cdhash, which leaves a stale
+# ACL entry in the "Claude Code-credentials" keychain item and re-prompts
+# the user. SIGN_IDENTITY can be overridden via env if you rotate the cert.
+SIGN_IDENTITY="${SIGN_IDENTITY:-ClaudeUsage Self-Signed}"
+
+echo "==> codesigning with identity: ${SIGN_IDENTITY}"
+codesign --force --sign "${SIGN_IDENTITY}" --identifier "${BUNDLE_ID}" "${APP_DIR}"
+
+# Confirm the signature didn't fall back to ad-hoc.
+if codesign -dvvv "${APP_DIR}" 2>&1 | grep -q "^Signature=adhoc$"; then
+  echo "ERROR: signature is ad-hoc — identity '${SIGN_IDENTITY}' was not applied" >&2
+  exit 1
+fi
 
 echo "==> done: $(pwd)/${APP_DIR}"
