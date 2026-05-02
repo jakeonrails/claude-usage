@@ -37,9 +37,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let button = statusItem.button else { return }
         let label = store.menubarLabel
         let baseFont = NSFont.menuBarFont(ofSize: 0)
+
+        // Subtle dark halo lifts the colored text off translucent menubars,
+        // especially against bright wallpapers.
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.55)
+        shadow.shadowOffset = NSSize(width: 0, height: -0.5)
+        shadow.shadowBlurRadius = 2.0
+
         let attrs: [NSAttributedString.Key: Any] = [
             .foregroundColor: label.color,
             .font: NSFont.systemFont(ofSize: baseFont.pointSize, weight: .black),
+            .shadow: shadow,
         ]
         button.attributedTitle = NSAttributedString(string: label.text, attributes: attrs)
     }
