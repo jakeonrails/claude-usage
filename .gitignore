@@ -5,3 +5,4 @@ build/
 DerivedData/
 ClaudeUsage.app/
 .DS_Store
+.env

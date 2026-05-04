@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Conductor workspace setup. Symlinks the shared .env (which holds the
+# code-signing identity) from the repo root into this workspace so
+# build-app.sh can pick it up.
+set -e
+cd "$(dirname "$0")/.."
+
+if [ -n "${CONDUCTOR_ROOT_PATH:-}" ] && [ -f "$CONDUCTOR_ROOT_PATH/.env" ]; then
+  ln -sf "$CONDUCTOR_ROOT_PATH/.env" .env
+  echo "==> linked .env from $CONDUCTOR_ROOT_PATH"
+else
+  echo "WARNING: no .env found at \$CONDUCTOR_ROOT_PATH — code signing will fall back to ad-hoc" >&2
+fi

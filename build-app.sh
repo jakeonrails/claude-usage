@@ -10,6 +10,12 @@ APP_DIR="${APP_NAME}.app"
 
 cd "$(dirname "$0")"
 
+# Load SIGN_IDENTITY (and any other secrets) from .env if present. Kept out
+# of git because the cert identity string contains a personal email + Team ID.
+if [[ -f .env ]]; then
+  set -a; . ./.env; set +a
+fi
+
 echo "==> swift build -c ${CONFIG}"
 swift build -c "${CONFIG}"
 
