@@ -85,7 +85,20 @@ struct PopoverView: View {
 
     private var weeklyAllSection: some View {
         let window = store.sevenDay
-        return weeklySection(title: "Weekly · All models", window: window, percentSize: 18, percentWeight: .medium)
+        let pace = PaceCalculator.compute(
+            weeklyUtilization: window?.utilization,
+            resetsAt: UsageFormat.parseResetsAt(window?.resets_at),
+            now: now
+        )
+        return VStack(alignment: .leading, spacing: 6) {
+            weeklySection(title: "Weekly · All models", window: window, percentSize: 18, percentWeight: .medium)
+            if let pace {
+                Text(pace.summary)
+                    .font(.caption)
+                    .foregroundStyle(pace.color)
+                    .monospacedDigit()
+            }
+        }
     }
 
     private func weeklyModelSection(title: String, window: UsageWindow) -> some View {
