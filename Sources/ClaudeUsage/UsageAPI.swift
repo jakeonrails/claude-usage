@@ -3,6 +3,14 @@ import Foundation
 struct UsageWindow: Decodable {
     let utilization: Double?
     let resets_at: String?
+
+    /// Returns `utilization` only if the window's reset time is still in the
+    /// future. Cached data outlives its window after long quits — once
+    /// `resets_at` has passed, the percentage no longer reflects reality.
+    func freshUtilization(now: Date = Date()) -> Double? {
+        guard let resets = UsageFormat.parseResetsAt(resets_at), resets > now else { return nil }
+        return utilization
+    }
 }
 
 struct ExtraUsage: Decodable {

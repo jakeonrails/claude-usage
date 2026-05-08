@@ -58,7 +58,7 @@ struct PopoverView: View {
         return VStack(alignment: .leading, spacing: 6) {
             Text("5-hour session").font(.subheadline).foregroundStyle(.secondary)
             HStack(alignment: .firstTextBaseline) {
-                Text(UsageFormat.percentString(window?.utilization))
+                Text(UsageFormat.percentString(window?.freshUtilization(now: now)))
                     .font(.system(size: 22, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                 Text("used")
@@ -72,7 +72,7 @@ struct PopoverView: View {
                         .monospacedDigit()
                 }
             }
-            if let util = window?.utilization {
+            if let util = window?.freshUtilization(now: now) {
                 UsageGauge(
                     utilization: util,
                     timeElapsedFraction: elapsedFraction(resetsAt: window?.resets_at, windowDuration: Self.fiveHourWindow),
@@ -86,7 +86,7 @@ struct PopoverView: View {
     private var weeklyAllSection: some View {
         let window = store.sevenDay
         let pace = PaceCalculator.compute(
-            weeklyUtilization: window?.utilization,
+            weeklyUtilization: window?.freshUtilization(now: now),
             resetsAt: UsageFormat.parseResetsAt(window?.resets_at),
             now: now
         )
@@ -115,7 +115,7 @@ struct PopoverView: View {
         return VStack(alignment: .leading, spacing: 6) {
             Text(title).font(.subheadline).foregroundStyle(.secondary)
             HStack(alignment: .firstTextBaseline) {
-                Text(UsageFormat.percentString(window?.utilization))
+                Text(UsageFormat.percentString(window?.freshUtilization(now: now)))
                     .font(.system(size: percentSize, weight: percentWeight, design: .rounded))
                     .monospacedDigit()
                 Text("used")
@@ -129,7 +129,7 @@ struct PopoverView: View {
                         .monospacedDigit()
                 }
             }
-            if let util = window?.utilization {
+            if let util = window?.freshUtilization(now: now) {
                 UsageGauge(
                     utilization: util,
                     timeElapsedFraction: elapsedFraction(resetsAt: window?.resets_at, windowDuration: Self.weeklyWindow),

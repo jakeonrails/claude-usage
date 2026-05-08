@@ -139,7 +139,7 @@ final class UsageStore: ObservableObject {
     /// We display percentage USED. Color comes from `UsageColor`:
     /// constant warm orange ≤60%, then HSL gradient toward saturated red.
     var menubarLabel: (text: String, color: NSColor) {
-        guard let util = fiveHour?.utilization else {
+        guard let util = fiveHour?.freshUtilization() else {
             // No cached data at all. Distinguish "waiting on rate limit" from
             // a hard error so the user knows whether to act.
             if let until = rateLimitedUntil, until > Date() { return ("⏳", .secondaryLabelColor) }
