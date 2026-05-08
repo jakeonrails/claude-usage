@@ -20,6 +20,7 @@ struct UsageResponse: Decodable {
 
 enum UsageAPIError: Error, LocalizedError {
     case http(Int, String)
+    case rateLimited(retryAfter: TimeInterval)
     case transport(Error)
     case decode(Error)
 
@@ -28,14 +29,39 @@ enum UsageAPIError: Error, LocalizedError {
         case .http(let code, let body):
             let preview = body.prefix(200)
             return "HTTP \(code): \(preview)"
+        case .rateLimited(let retryAfter):
+            return "Rate limited. Retry in \(Int(retryAfter))s."
         case .transport(let e): return "Network error: \(e.localizedDescription)"
         case .decode(let e): return "Decode error: \(e.localizedDescription)"
         }
     }
 }
 
+struct RateLimitInfo {
+    let requestsRemaining: Int?
+    let requestsLimit: Int?
+    let resetAt: Date?
+}
+
 enum UsageAPI {
     static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
+
+    /// Most recent rate-limit headers observed. Read after each fetch.
+    static private(set) var lastRateLimit: RateLimitInfo?
+
+    private static func parseRateLimit(_ http: HTTPURLResponse) -> RateLimitInfo {
+        let remaining = (http.value(forHTTPHeaderField: "anthropic-ratelimit-requests-remaining"))
+            .flatMap { Int($0) }
+        let limit = (http.value(forHTTPHeaderField: "anthropic-ratelimit-requests-limit"))
+            .flatMap { Int($0) }
+        // -reset is typically RFC3339; fall back to seconds-from-now.
+        var reset: Date?
+        if let s = http.value(forHTTPHeaderField: "anthropic-ratelimit-requests-reset") {
+            reset = UsageFormat.parseResetsAt(s)
+                ?? TimeInterval(s).map { Date().addingTimeInterval($0) }
+        }
+        return RateLimitInfo(requestsRemaining: remaining, requestsLimit: limit, resetAt: reset)
+    }
 
     static func fetch(accessToken: String) async throws -> UsageResponse {
         var req = URLRequest(url: endpoint)
@@ -58,7 +84,17 @@ enum UsageAPI {
         guard let http = response as? HTTPURLResponse else {
             throw UsageAPIError.http(-1, "no http response")
         }
+        lastRateLimit = parseRateLimit(http)
         guard (200..<300).contains(http.statusCode) else {
+            if http.statusCode == 429 {
+                let header = http.value(forHTTPHeaderField: "Retry-After")
+                    ?? http.value(forHTTPHeaderField: "retry-after")
+                let headerSeconds = header.flatMap { TimeInterval($0.trimmingCharacters(in: .whitespaces)) }
+                // Prefer the precise reset timestamp if Anthropic returned one.
+                let resetSeconds = lastRateLimit?.resetAt.map { max(0, $0.timeIntervalSinceNow) }
+                let seconds = headerSeconds ?? resetSeconds ?? 60
+                throw UsageAPIError.rateLimited(retryAfter: max(15, seconds))
+            }
             let body = String(data: data, encoding: .utf8) ?? ""
             throw UsageAPIError.http(http.statusCode, body)
         }

@@ -13,9 +13,13 @@ final class UsageStore: ObservableObject {
 
     @Published private(set) var state: LoadState = .idle
     @Published private(set) var lastSuccess: (response: UsageResponse, at: Date)?
+    /// When set in the future, refresh() is a no-op. Cleared on successful fetch.
+    @Published private(set) var rateLimitedUntil: Date?
 
     private var timer: Timer?
-    private let refreshInterval: TimeInterval = 60
+    /// Usage % doesn't change second-to-second. Polling more often just earns
+    /// 429s, especially when multiple Conductor workspaces run the app.
+    private let refreshInterval: TimeInterval = 120
 
     init() {
         // Hydrate from the on-disk cache so the menubar shows real data
@@ -42,13 +46,26 @@ final class UsageStore: ObservableObject {
 
     func refresh() async {
         if case .loading = state { return }
+        if let until = rateLimitedUntil, until > Date() { return }
         state = .loading
         do {
             let usage = try await fetchUsageWithRefresh()
             let now = Date()
             lastSuccess = (usage, now)
             state = .loaded(usage, now)
+            // If the server told us we're nearly out of budget, defer the next
+            // refresh until it resets, even on 200s. Avoids tipping into 429.
+            if let rl = UsageAPI.lastRateLimit,
+               let remaining = rl.requestsRemaining, remaining <= 1,
+               let reset = rl.resetAt {
+                rateLimitedUntil = reset
+            } else {
+                rateLimitedUntil = nil
+            }
             UsageCache.save(usage, at: now)
+        } catch UsageAPIError.rateLimited(let retryAfter) {
+            rateLimitedUntil = Date().addingTimeInterval(retryAfter)
+            state = .error("Rate limited. Retrying in \(Int(retryAfter))s.", Date())
         } catch {
             state = .error(error.localizedDescription, Date())
         }
@@ -123,6 +140,9 @@ final class UsageStore: ObservableObject {
     /// constant warm orange ≤60%, then HSL gradient toward saturated red.
     var menubarLabel: (text: String, color: NSColor) {
         guard let util = fiveHour?.utilization else {
+            // No cached data at all. Distinguish "waiting on rate limit" from
+            // a hard error so the user knows whether to act.
+            if let until = rateLimitedUntil, until > Date() { return ("⏳", .secondaryLabelColor) }
             if case .error = state { return ("!", .systemRed) }
             return ("…", .secondaryLabelColor)
         }
