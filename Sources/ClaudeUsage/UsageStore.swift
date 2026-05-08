@@ -18,7 +18,18 @@ final class UsageStore: ObservableObject {
     private let refreshInterval: TimeInterval = 60
 
     init() {
-        Task { await self.refresh() }
+        // Hydrate from the on-disk cache so the menubar shows real data
+        // immediately on launch — and so frequent restarts (./install.sh)
+        // don't immediately refire the API and earn a 429.
+        if let cached = UsageCache.load() {
+            lastSuccess = (cached.response, cached.fetchedAt)
+            state = .loaded(cached.response, cached.fetchedAt)
+        }
+        // Skip the launch-time fetch if cache is still fresh.
+        let cacheAge = lastSuccess.map { Date().timeIntervalSince($0.at) } ?? .infinity
+        if cacheAge >= refreshInterval {
+            Task { await self.refresh() }
+        }
         startTimer()
     }
 
@@ -37,6 +48,7 @@ final class UsageStore: ObservableObject {
             let now = Date()
             lastSuccess = (usage, now)
             state = .loaded(usage, now)
+            UsageCache.save(usage, at: now)
         } catch {
             state = .error(error.localizedDescription, Date())
         }
