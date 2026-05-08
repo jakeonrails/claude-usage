@@ -6,6 +6,7 @@ enum KeychainError: Error, LocalizedError {
     case unexpectedData
     case osStatus(OSStatus)
     case missingRefreshToken
+    case securityCLIFailed(exit: Int32, stderr: String)
 
     var errorDescription: String? {
         switch self {
@@ -18,6 +19,10 @@ enum KeychainError: Error, LocalizedError {
             return "Keychain error: \(s)"
         case .missingRefreshToken:
             return "Keychain item missing claudeAiOauth.refreshToken — sign in to Claude Code again."
+        case .securityCLIFailed(let exit, let stderr):
+            let trimmed = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.contains("could not be found") { return KeychainError.itemNotFound.errorDescription ?? "" }
+            return "security CLI failed (exit \(exit)): \(trimmed.isEmpty ? "no stderr" : trimmed)"
         }
     }
 }
@@ -95,20 +100,52 @@ enum Keychain {
         return dict
     }
 
+    /// Reads the credentials JSON via `/usr/bin/security`. Going through the
+    /// system binary sidesteps the macOS ACL prompt: `security` is already on
+    /// the keychain item's trusted-app list (Claude Code's CLI uses it), so
+    /// the read is authorized regardless of *our* signing identity. This is
+    /// the same workaround CodexBar and richhickson/claudecodeusage adopted
+    /// after stable code-signing alone failed to keep "Always Allow" sticky
+    /// across token refreshes on macOS 15+.
+    ///
+    /// Trade-off: the consent decision is effectively "allow `security`",
+    /// not "allow ClaudeUsage" — anything on this Mac that can spawn
+    /// `/usr/bin/security` could read the same item. That matches the model
+    /// the `claude` CLI itself relies on, so we accept it here.
     private static func loadData() throws -> Data {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-            kSecReturnData as String: true,
-        ]
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-        guard status == errSecSuccess else {
-            if status == errSecItemNotFound { throw KeychainError.itemNotFound }
-            throw KeychainError.osStatus(status)
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        proc.arguments = ["find-generic-password", "-s", service, "-w"]
+
+        let stdout = Pipe()
+        let stderr = Pipe()
+        proc.standardOutput = stdout
+        proc.standardError = stderr
+
+        do {
+            try proc.run()
+        } catch {
+            throw KeychainError.securityCLIFailed(exit: -1, stderr: "spawn failed: \(error.localizedDescription)")
         }
-        guard let data = item as? Data else { throw KeychainError.unexpectedData }
+        proc.waitUntilExit()
+
+        let outData = stdout.fileHandleForReading.readDataToEndOfFile()
+        let errData = stderr.fileHandleForReading.readDataToEndOfFile()
+        let errStr = String(data: errData, encoding: .utf8) ?? ""
+
+        guard proc.terminationStatus == 0 else {
+            if errStr.contains("could not be found") { throw KeychainError.itemNotFound }
+            throw KeychainError.securityCLIFailed(exit: proc.terminationStatus, stderr: errStr)
+        }
+
+        // `security -w` prints the password followed by a newline.
+        guard let str = String(data: outData, encoding: .utf8) else {
+            throw KeychainError.unexpectedData
+        }
+        let trimmed = str.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let data = trimmed.data(using: .utf8) else {
+            throw KeychainError.unexpectedData
+        }
         return data
     }
 }
