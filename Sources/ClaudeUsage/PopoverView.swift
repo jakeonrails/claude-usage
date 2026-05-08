@@ -93,10 +93,15 @@ struct PopoverView: View {
         return VStack(alignment: .leading, spacing: 6) {
             weeklySection(title: "Weekly · All models", window: window, percentSize: 18, percentWeight: .medium)
             if let pace {
-                Text(pace.summary)
-                    .font(.caption)
-                    .foregroundStyle(pace.color)
-                    .monospacedDigit()
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(pace.color)
+                        .frame(width: 8, height: 8)
+                    Text(pace.summary)
+                        .font(.callout)
+                        .foregroundStyle(.primary)
+                        .monospacedDigit()
+                }
             }
         }
     }
@@ -142,11 +147,23 @@ struct PopoverView: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if let err = store.errorMessage {
-                Text(err)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .lineLimit(3)
+            if let until = store.rateLimitedUntil, until > now {
+                let secs = max(0, Int(until.timeIntervalSince(now)))
+                HStack(spacing: 6) {
+                    Circle().fill(.orange).frame(width: 8, height: 8)
+                    Text("Rate limited. Retrying in \(secs)s.")
+                        .font(.callout)
+                        .foregroundStyle(.primary)
+                        .monospacedDigit()
+                }
+            } else if let err = store.errorMessage {
+                HStack(alignment: .top, spacing: 6) {
+                    Circle().fill(.red).frame(width: 8, height: 8).padding(.top, 4)
+                    Text(err)
+                        .font(.callout)
+                        .foregroundStyle(.primary)
+                        .lineLimit(3)
+                }
             }
             HStack {
                 if let last = store.lastUpdated {
