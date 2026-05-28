@@ -71,6 +71,18 @@ enum UsageAPI {
         return RateLimitInfo(requestsRemaining: remaining, requestsLimit: limit, resetAt: reset)
     }
 
+    /// Log every response's rate-limit state so we can see actual budget vs.
+    /// our poll rate in /tmp/claudeusage.{out,err}.log.
+    private static func logRateLimit(status: Int, info: RateLimitInfo?, http: HTTPURLResponse) {
+        let rem = info?.requestsRemaining.map(String.init) ?? "?"
+        let lim = info?.requestsLimit.map(String.init) ?? "?"
+        let resetIn = info?.resetAt.map { "\(Int(max(0, $0.timeIntervalSinceNow)))s" } ?? "?"
+        let retryAfter = http.value(forHTTPHeaderField: "Retry-After")
+            ?? http.value(forHTTPHeaderField: "retry-after") ?? "-"
+        let line = "[ClaudeUsage] usage \(status) rl=\(rem)/\(lim) reset=\(resetIn) retry-after=\(retryAfter)\n"
+        FileHandle.standardOutput.write(Data(line.utf8))
+    }
+
     static func fetch(accessToken: String) async throws -> UsageResponse {
         var req = URLRequest(url: endpoint)
         req.httpMethod = "GET"
@@ -93,6 +105,7 @@ enum UsageAPI {
             throw UsageAPIError.http(-1, "no http response")
         }
         lastRateLimit = parseRateLimit(http)
+        logRateLimit(status: http.statusCode, info: lastRateLimit, http: http)
         guard (200..<300).contains(http.statusCode) else {
             if http.statusCode == 429 {
                 let header = http.value(forHTTPHeaderField: "Retry-After")
@@ -101,7 +114,11 @@ enum UsageAPI {
                 // Prefer the precise reset timestamp if Anthropic returned one.
                 let resetSeconds = lastRateLimit?.resetAt.map { max(0, $0.timeIntervalSinceNow) }
                 let seconds = headerSeconds ?? resetSeconds ?? 60
-                throw UsageAPIError.rateLimited(retryAfter: max(15, seconds))
+                let wait = max(15, seconds)
+                FileHandle.standardError.write(Data(
+                    "[ClaudeUsage] 429 rate limited. Retry-After header=\(header ?? "<none>") reset=\(resetSeconds.map { String(Int($0)) + "s" } ?? "<none>") → waiting \(Int(wait))s\n".utf8
+                ))
+                throw UsageAPIError.rateLimited(retryAfter: wait)
             }
             let body = String(data: data, encoding: .utf8) ?? ""
             throw UsageAPIError.http(http.statusCode, body)
