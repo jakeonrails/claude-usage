@@ -172,12 +172,28 @@ struct PopoverView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button("Refresh") { Task { await store.refresh() } }
+                refreshButton
                     .controlSize(.small)
                 Button("Quit") { NSApp.terminate(nil) }
                     .controlSize(.small)
             }
         }
+    }
+
+    private var refreshButton: some View {
+        let isLoading = { if case .loading = store.state { return true }; return false }()
+        let rateLimited = (store.rateLimitedUntil ?? .distantPast) > now
+        let disabled = isLoading || rateLimited
+        let tip: String = {
+            if isLoading { return "Refreshing…" }
+            if rateLimited, let until = store.rateLimitedUntil {
+                return "Rate limited — auto-retries in \(UsageFormat.compactDuration(until: until, now: now))"
+            }
+            return "Fetch usage now"
+        }()
+        return Button("Refresh") { Task { await store.refresh() } }
+            .disabled(disabled)
+            .help(tip)
     }
 
     // MARK: Derived

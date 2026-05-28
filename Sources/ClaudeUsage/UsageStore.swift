@@ -17,9 +17,10 @@ final class UsageStore: ObservableObject {
     @Published private(set) var rateLimitedUntil: Date?
 
     private var timer: Timer?
-    /// Usage % doesn't change second-to-second. Polling more often just earns
-    /// 429s, especially when multiple Conductor workspaces run the app.
-    private let refreshInterval: TimeInterval = 120
+    /// Usage % doesn't change second-to-second. Anthropic's `/usage` endpoint
+    /// caps around 30 req/hour per account, so we target 29/hour (3600/29 ≈
+    /// 124s, rounded up to 125) to stay just under it without burning budget.
+    private let refreshInterval: TimeInterval = 125
 
     init() {
         // Hydrate from the on-disk cache so the menubar shows real data

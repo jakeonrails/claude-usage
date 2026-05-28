@@ -40,7 +40,7 @@ cat >"${APP_DIR}/Contents/Info.plist" <<PLIST
   <key>CFBundleName</key>
   <string>${APP_NAME}</string>
   <key>CFBundleDisplayName</key>
-  <string>Claude Code Usage</string>
+  <string>Claude Usage</string>
   <key>CFBundleIdentifier</key>
   <string>${BUNDLE_ID}</string>
   <key>CFBundleExecutable</key>
