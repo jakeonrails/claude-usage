@@ -57,9 +57,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let button = statusItem.button else { return }
         if popover.isShown {
             popover.performClose(sender)
-        } else {
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            popover.contentViewController?.view.window?.makeKey()
+            return
         }
+
+        // Let AppKit place the popover first…
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        popover.contentViewController?.view.window?.makeKey()
+
+        // …then put it exactly where we want it. On macOS 26 (Tahoe) the menu bar
+        // is taller than the status-item button's window, and AppKit's anchor-rect
+        // math mis-places the popover (it ends up overlapping / above the bar).
+        // Working in screen coordinates is flip-independent and doesn't depend on
+        // AppKit honoring preferredEdge: we drop the popover's top edge to just
+        // below the menu bar and center it horizontally under the button.
+        guard let popoverWindow = popover.contentViewController?.view.window,
+              let buttonWindow = button.window,
+              let screen = buttonWindow.screen
+        else { return }
+
+        let buttonInScreen = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
+        let popoverSize = popoverWindow.frame.size
+
+        // visibleFrame.maxY is the first point below the menu bar.
+        let topEdge = screen.visibleFrame.maxY
+        var origin = NSPoint(
+            x: buttonInScreen.midX - popoverSize.width / 2,
+            y: topEdge - popoverSize.height
+        )
+
+        // Keep it on-screen horizontally.
+        let minX = screen.visibleFrame.minX
+        let maxX = screen.visibleFrame.maxX - popoverSize.width
+        origin.x = min(max(origin.x, minX), maxX)
+
+        NSLog("ClaudeUsage popover: buttonInScreen=\(buttonInScreen) "
+            + "screen.frame=\(screen.frame) visibleFrame=\(screen.visibleFrame) "
+            + "popoverSize=\(popoverSize) placedOrigin=\(origin) "
+            + "preShowFrame=\(popoverWindow.frame)")
+
+        popoverWindow.setFrameOrigin(origin)
     }
 }
