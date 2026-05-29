@@ -47,7 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let attrs: [NSAttributedString.Key: Any] = [
             .foregroundColor: label.color,
-            .font: NSFont.systemFont(ofSize: baseFont.pointSize, weight: .black),
+            .font: NSFont.systemFont(ofSize: baseFont.pointSize, weight: .heavy),
             .shadow: shadow,
         ]
         button.attributedTitle = NSAttributedString(string: label.text, attributes: attrs)
