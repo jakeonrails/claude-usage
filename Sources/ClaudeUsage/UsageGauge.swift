@@ -21,7 +21,7 @@ struct UsageGauge: View {
     var gridLabels: [String]? = nil
 
     private let trackHeight: CGFloat = 8
-    private let tickOverhang: CGFloat = 4
+    private let tickOverhang: CGFloat = 5
     private let labelHeight: CGFloat = 12
 
     private var labelSpace: CGFloat { (gridLabels?.isEmpty ?? true) ? 0 : labelHeight }
@@ -83,13 +83,13 @@ struct UsageGauge: View {
 
             if let frac = timeElapsedFraction {
                 let clamped = min(max(frac, 0), 1)
-                let tickWidth: CGFloat = 2
+                let tickWidth: CGFloat = 3
                 let tickHeight = trackHeight + tickOverhang * 2
                 let tickX = size.width * clamped - tickWidth / 2
                 let tickY = trackY - tickOverhang
                 let tickRect = CGRect(x: tickX, y: tickY, width: tickWidth, height: tickHeight)
                 context.fill(
-                    Path(roundedRect: tickRect, cornerRadius: 1),
+                    Path(roundedRect: tickRect, cornerRadius: 1.5),
                     with: .color(.black)
                 )
             }

@@ -10,26 +10,41 @@ import SwiftUI
 ///   90% → red
 ///   100% → dark red
 ///
+/// The yellow band is intrinsically light, so on the **light** appearance it
+/// gets a darker, more amber lightness to stay legible against the light-gray
+/// track; dark mode keeps the brighter yellow. The returned `NSColor` is
+/// dynamic, so it re-resolves automatically when the appearance changes.
+///
 /// Values are clamped to 0…100.
 enum UsageColor {
-    /// (percent, color) gradient stops, ascending by percent.
-    private static let stops: [(pct: Double, color: HSL)] = [
-        (0,   HSL(h: 120, s: 0.65, l: 0.42)),  // green
-        (50,  HSL(h: 52,  s: 0.95, l: 0.50)),  // yellow
-        (70,  HSL(h: 32,  s: 0.95, l: 0.50)),  // orange
-        (90,  HSL(h: 0,   s: 0.90, l: 0.50)),  // red
-        (100, HSL(h: 0,   s: 0.80, l: 0.32)),  // dark red
-    ]
+    /// (percent, color) gradient stops, ascending by percent. The yellow stop
+    /// differs by appearance; everything else is shared.
+    private static func stops(dark: Bool) -> [(pct: Double, color: HSL)] {
+        let yellow = dark
+            ? HSL(h: 52, s: 0.95, l: 0.50)   // bright yellow on dark background
+            : HSL(h: 48, s: 0.95, l: 0.38)   // darker amber on light background
+        return [
+            (0,   HSL(h: 120, s: 0.65, l: 0.42)),  // green
+            (50,  yellow),                         // yellow / amber
+            (70,  HSL(h: 32,  s: 0.95, l: 0.50)),  // orange
+            (90,  HSL(h: 0,   s: 0.90, l: 0.50)),  // red
+            (100, HSL(h: 0,   s: 0.80, l: 0.32)),  // dark red
+        ]
+    }
 
     static func nsColor(forUsed util: Double) -> NSColor {
-        hsl(forUsed: util).toNSColor()
+        NSColor(name: nil) { appearance in
+            let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            return hsl(forUsed: util, dark: isDark).toNSColor()
+        }
     }
 
     static func swiftUIColor(forUsed util: Double) -> Color {
         Color(nsColor: nsColor(forUsed: util))
     }
 
-    private static func hsl(forUsed util: Double) -> HSL {
+    private static func hsl(forUsed util: Double, dark: Bool) -> HSL {
+        let stops = stops(dark: dark)
         let p = min(max(util, 0), 100)
         if p <= stops.first!.pct { return stops.first!.color }
         if p >= stops.last!.pct { return stops.last!.color }
