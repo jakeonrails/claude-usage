@@ -20,6 +20,8 @@ struct UsageGauge: View {
     /// label under each. `nil`/empty = no grid.
     var gridLabels: [String]? = nil
 
+    @Environment(\.colorScheme) private var colorScheme
+
     private let trackHeight: CGFloat = 8
     private let tickOverhang: CGFloat = 5
     private let labelHeight: CGFloat = 12
@@ -88,9 +90,20 @@ struct UsageGauge: View {
                 let tickX = size.width * clamped - tickWidth / 2
                 let tickY = trackY - tickOverhang
                 let tickRect = CGRect(x: tickX, y: tickY, width: tickWidth, height: tickHeight)
+                // In dark mode the tick is white; draw a hair-thin black halo
+                // behind it so it stays distinct from light fill colors.
+                if colorScheme == .dark {
+                    let b: CGFloat = 0.75
+                    context.fill(
+                        Path(roundedRect: tickRect.insetBy(dx: -b, dy: -b), cornerRadius: 1.5 + b),
+                        with: .color(.black)
+                    )
+                }
+                // .primary = black in light mode, white in dark mode, so the
+                // progress tick stays legible against either background.
                 context.fill(
                     Path(roundedRect: tickRect, cornerRadius: 1.5),
-                    with: .color(.black)
+                    with: .color(.primary)
                 )
             }
         }
