@@ -31,7 +31,7 @@ The fetch path is intentionally three-layered, and each layer exists for a speci
 
 `CookieJar.swift` persists the Cloudflare `_cfuvid` cookie in `UserDefaults` across launches (CF sets it as a session cookie so `HTTPCookieStorage` drops it on quit). `App.main` calls `CookieJar.restore()` *before* any URLSession use, and both `UsageAPI.fetch` and `OAuth.refresh` call `captureFromSharedStorage()` on success.
 
-UI rendering: `UsageColor.swift` interpolates HSL from warm orange (`#DA7756`, ≤60% used) toward saturated red (`#E60023`, 100%) via the short hue path. `UsageGauge.swift` is a `Canvas` bar with an optional "you are here" tick at the time-elapsed fraction — fill past the tick = burning quota faster than the clock.
+UI rendering: `UsageColor.swift` interpolates HSL across a multi-stop gradient keyed to utilization — green (0%) → yellow (50%) → orange (70%) → red (90%) → dark red (100%). `UsageGauge.swift` is a `Canvas` bar with an optional "you are here" tick at the time-elapsed fraction — fill past the tick = burning quota faster than the clock.
 
 ## Code signing — load-bearing for keychain ACLs
 
