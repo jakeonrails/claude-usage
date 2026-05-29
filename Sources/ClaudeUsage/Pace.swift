@@ -35,13 +35,16 @@ struct WeeklyPace {
         return .leavingOnTable
     }
 
+    /// Dot color, on the shared `UsageColor` scale, driven by `slack` (pace −
+    /// sessions-to-max): 3 sessions *under* max → green, on pace → yellow,
+    /// 3 *over* → dark red. Maxed stays green; TBD (too early) is gray.
     var color: Color {
-        switch verdict {
-        case .maxed, .onTrack: return .green
-        case .close: return .yellow
-        case .leavingOnTable: return .blue
-        case .tooEarly: return .secondary
-        }
+        if isMaxed { return .green }
+        guard let slack else { return .secondary }
+        let clamped = min(max(Double(slack), -3), 3)
+        // -3 → 0% (green) … +3 → 100% (dark red)
+        let scalePercent = (clamped + 3) / 6 * 100
+        return UsageColor.swiftUIColor(forUsed: scalePercent)
     }
 
     var summary: String {
@@ -51,7 +54,7 @@ struct WeeklyPace {
         case .tooEarly, .onTrack, .close, .leavingOnTable:
             let s = sessionsToMax == 1 ? "session" : "sessions"
             let pace = atCurrentPace.map { "~\($0)" } ?? "TBD"
-            return "\(sessionsToMax) \(s) to max · \(pace) at current pace"
+            return "\(sessionsToMax) \(s) to max, \(pace) at current pace"
         }
     }
 }
