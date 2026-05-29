@@ -3,7 +3,7 @@ import Combine
 import SwiftUI
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private let store = UsageStore()
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             rootView: PopoverView(store: store)
         )
         popover.contentSize = NSSize(width: 280, height: 200)
+        popover.delegate = self
 
         // objectWillChange fires before the @Published value is written, so
         // hop to the next runloop tick to read the post-write state.
@@ -83,6 +84,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func popoverWindowDidResize(_ note: Notification) {
         guard popover.isShown else { return }
         positionPopover()
+    }
+
+    // The popover window is torn down and recreated across opens (.transient),
+    // so drop the resize observer on close — otherwise it dangles on a dead
+    // window. This is the only didResizeNotification observer we register, so
+    // removing by name (object: nil) is safe.
+    func popoverDidClose(_ notification: Notification) {
+        NotificationCenter.default.removeObserver(
+            self, name: NSWindow.didResizeNotification, object: nil)
     }
 
     /// Pins the popover just below the menu bar, centered under the status item.
