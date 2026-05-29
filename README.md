@@ -3,14 +3,22 @@
 A tiny macOS menubar app that shows how much Claude Code session quota you have
 left, color-coded.
 
-<img width="300" height="403" alt="image" src="https://github.com/user-attachments/assets/2fc91e49-3096-4a2e-85d4-84853dff253e" />
+<img width="300" alt="Claude Code Usage menubar popover" src="docs/screenshot.png" />
 
 - Menubar text: percentage **used** in your current 5-hour session.
-- **Green** ≤ 60% used &nbsp; • &nbsp; **Orange** > 60% used &nbsp; • &nbsp; **Red** > 80% used
+- Color is a smooth gradient keyed to usage: **green** (0%) → **yellow** (50%)
+  → **orange** (70%) → **red** (90%) → **dark red** (100%). The same ramp colors
+  the bars and the big percentages in the popover.
 - Click the icon for: percent used in the 5-hour window with reset countdown,
-  weekly used + reset countdown, and per-model weekly (Opus / Sonnet) where
+  the weekly total + reset countdown, and per-model weekly (Opus / Sonnet) where
   your plan exposes them.
-- Refreshes every 60 seconds.
+- Each bar has labeled gridlines (clock hours on the 5-hour bar, weekday names on
+  the weekly bar) and a "you are here" tick showing how far you are through the
+  window — fill past the tick means you're burning quota faster than the clock.
+- The weekly section also shows a pace line: how many maxed sessions you'd need to
+  hit 100%, and how many you're on track for at your current burn rate.
+- Refreshes about every two minutes (rate-limit aware, so it stays under
+  Anthropic's usage-endpoint cap).
 - OAuth access tokens are refreshed automatically (proactively when expired,
   or on a 401 from the usage endpoint), and the rotated tokens are written
   back to the same Keychain item Claude Code uses.
@@ -21,13 +29,16 @@ It reuses your already-authenticated Claude Code session — no separate login,
 no cookie copying. On each refresh it:
 
 1. Reads the OAuth token from your macOS Keychain item `Claude Code-credentials`
-   (the same item Claude Code itself writes).
+   (the same item Claude Code itself writes), by shelling out to
+   `/usr/bin/security` — which is already on that item's trusted-app list, so it
+   doesn't trigger an extra Keychain prompt.
 2. Calls `https://api.anthropic.com/api/oauth/usage` with that token.
 3. Parses `five_hour`, `seven_day`, `seven_day_opus`, `seven_day_sonnet`.
 
-The first time you run the app, macOS will show one Keychain Access dialog
-asking permission to read `Claude Code-credentials`. Click **Always Allow** and
-it'll be silent thereafter.
+Because the read goes through `/usr/bin/security` (already trusted on that
+keychain item), it normally won't prompt at all. If macOS does show a Keychain
+Access dialog asking permission to read `Claude Code-credentials`, click
+**Always Allow** and it'll be silent thereafter.
 
 If you've never signed into Claude Code on this Mac, the app will show an
 error in its popup explaining the credentials weren't found.
@@ -140,4 +151,6 @@ rm -rf /Applications/ClaudeUsage.app
 - The 5-hour and weekly *limits* are enforced server-side by Anthropic. This
   app just reads the percentage Anthropic returns; it does not compute its
   own session windows from local JSONL.
-- The keychain read is plain `SecItemCopyMatching` — no `security` shellout.
+- The keychain read shells out to `/usr/bin/security` rather than calling
+  `SecItemCopyMatching` directly. On macOS 15+ this is what keeps the ACL
+  "Always Allow" sticky across token rotations without re-prompting.
