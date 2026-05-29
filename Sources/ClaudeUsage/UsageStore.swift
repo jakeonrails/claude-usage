@@ -137,8 +137,8 @@ final class UsageStore: ObservableObject {
     }
 
     /// Menubar text + NSColor for the 5-hour window.
-    /// We display percentage USED. Color comes from `UsageColor`:
-    /// constant warm orange ≤60%, then HSL gradient toward saturated red.
+    /// We display percentage USED. Color comes from `UsageColor`: a smooth
+    /// green→yellow→orange→red→dark-red gradient keyed to the percentage.
     var menubarLabel: (text: String, color: NSColor) {
         guard let util = fiveHour?.freshUtilization() else {
             // No cached data at all. Distinguish "waiting on rate limit" from

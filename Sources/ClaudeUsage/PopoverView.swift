@@ -61,6 +61,7 @@ struct PopoverView: View {
                 Text(UsageFormat.percentString(window?.freshUtilization(now: now)))
                     .font(.system(size: 22, weight: .semibold, design: .rounded))
                     .monospacedDigit()
+                    .foregroundStyle(percentColor(window?.freshUtilization(now: now)))
                 Text("used")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -76,9 +77,10 @@ struct PopoverView: View {
                 UsageGauge(
                     utilization: util,
                     timeElapsedFraction: elapsedFraction(resetsAt: window?.resets_at, windowDuration: Self.fiveHourWindow),
-                    fillColor: UsageColor.swiftUIColor(forUsed: util)
+                    fillColor: UsageColor.swiftUIColor(forUsed: util),
+                    gridLabels: hourLabels(resetsAt: window?.resets_at, windowDuration: Self.fiveHourWindow, divisions: 5)
                 )
-                .help("Tick marks where you are in the 5-hour window. Fill past the tick = using faster than the clock.")
+                .help("Gridlines mark each hour of the 5-hour window; the tick marks where you are. Fill past the tick = using faster than the clock.")
             }
         }
     }
@@ -123,6 +125,7 @@ struct PopoverView: View {
                 Text(UsageFormat.percentString(window?.freshUtilization(now: now)))
                     .font(.system(size: percentSize, weight: percentWeight, design: .rounded))
                     .monospacedDigit()
+                    .foregroundStyle(percentColor(window?.freshUtilization(now: now)))
                 Text("used")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -138,9 +141,10 @@ struct PopoverView: View {
                 UsageGauge(
                     utilization: util,
                     timeElapsedFraction: elapsedFraction(resetsAt: window?.resets_at, windowDuration: Self.weeklyWindow),
-                    fillColor: UsageColor.swiftUIColor(forUsed: util)
+                    fillColor: UsageColor.swiftUIColor(forUsed: util),
+                    gridLabels: weekdayLabels(resetsAt: window?.resets_at, windowDuration: Self.weeklyWindow, divisions: 7)
                 )
-                .help("Tick marks where you are in the weekly window. Fill past the tick = using faster than the clock.")
+                .help("Gridlines mark each day of the 7-day window; the tick marks where you are. Fill past the tick = using faster than the clock.")
             }
         }
     }
@@ -198,10 +202,51 @@ struct PopoverView: View {
 
     // MARK: Derived
 
+    /// Color for the big "% used" stat — matches its bar via `UsageColor`.
+    /// Falls back to primary when there's no fresh utilization to show.
+    private func percentColor(_ util: Double?) -> Color {
+        util.map { UsageColor.swiftUIColor(forUsed: $0) } ?? .primary
+    }
+
     private func elapsedFraction(resetsAt: String?, windowDuration: TimeInterval) -> Double? {
         guard let resetDate = UsageFormat.parseResetsAt(resetsAt) else { return nil }
         let windowStart = resetDate.addingTimeInterval(-windowDuration)
         let elapsed = now.timeIntervalSince(windowStart)
         return min(max(elapsed / windowDuration, 0), 1)
+    }
+
+    /// Weekday abbreviations (Mon, Tue, …) for each day-cell of the weekly bar.
+    /// The cell `now` falls in is "today"; the rest are counted off the system
+    /// calendar from there. Falls back to plain numbers if the window is stale.
+    private func weekdayLabels(resetsAt: String?, windowDuration: TimeInterval, divisions: Int) -> [String] {
+        guard let frac = elapsedFraction(resetsAt: resetsAt, windowDuration: windowDuration) else {
+            return (1...divisions).map { "\($0)" }
+        }
+        let symbols = Calendar.current.shortWeekdaySymbols   // ["Sun"…"Sat"], locale-aware
+        // 1-based cell that `now` sits in == today. floor(frac*divisions) can hit
+        // `divisions` exactly when frac == 1, so clamp.
+        let currentCell = min(divisions, Int(frac * Double(divisions)) + 1)
+        let todayIndex = Calendar.current.component(.weekday, from: now) - 1   // 0=Sun…6=Sat
+        return (1...divisions).map { cell in
+            let idx = ((todayIndex + (cell - currentCell)) % 7 + 7) % 7
+            return symbols[idx]
+        }
+    }
+
+    /// Clock-hour labels (12a, 1a, …, 11p) for each hour-cell of the session
+    /// bar. The cell `now` falls in is the current clock hour; the rest count
+    /// off it. Falls back to plain numbers if the window is stale.
+    private func hourLabels(resetsAt: String?, windowDuration: TimeInterval, divisions: Int) -> [String] {
+        guard let frac = elapsedFraction(resetsAt: resetsAt, windowDuration: windowDuration) else {
+            return (1...divisions).map { "\($0)" }
+        }
+        let currentCell = min(divisions, Int(frac * Double(divisions)) + 1)
+        let currentHour = Calendar.current.component(.hour, from: now)
+        return (1...divisions).map { cell in
+            let hour = ((currentHour + (cell - currentCell)) % 24 + 24) % 24
+            let suffix = hour < 12 ? "a" : "p"
+            let twelve = hour % 12 == 0 ? 12 : hour % 12
+            return "\(twelve)\(suffix)"
+        }
     }
 }

@@ -1,18 +1,25 @@
 import AppKit
 import SwiftUI
 
-/// Color rules for the menubar text and popover meter:
+/// Color for the menubar text and popover meters. A smooth multi-stop gradient,
+/// interpolated linearly in HSL between the stops below:
 ///
-/// - For utilization ≤ 60% the color is a constant warm orange `#DA7756`.
-/// - For utilization > 60% the color is interpolated in HSL from `#DA7756`
-///   toward saturated red `#E60023` as utilization approaches 100%, taking
-///   the short hue path (15° → 351°), increasing saturation, and decreasing
-///   lightness.
+///   0%  → green
+///   50% → yellow
+///   70% → orange
+///   90% → red
+///   100% → dark red
+///
+/// Values are clamped to 0…100.
 enum UsageColor {
-    /// HSL(15°, 64%, 60%) ≈ #DA7756
-    private static let warmOrange = HSL(h: 15, s: 0.64, l: 0.60)
-    /// HSL(351°, 100%, 45.1%) ≈ #E60023
-    private static let saturatedRed = HSL(h: 351, s: 1.0, l: 0.451)
+    /// (percent, color) gradient stops, ascending by percent.
+    private static let stops: [(pct: Double, color: HSL)] = [
+        (0,   HSL(h: 120, s: 0.65, l: 0.42)),  // green
+        (50,  HSL(h: 52,  s: 0.95, l: 0.50)),  // yellow
+        (70,  HSL(h: 32,  s: 0.95, l: 0.50)),  // orange
+        (90,  HSL(h: 0,   s: 0.90, l: 0.50)),  // red
+        (100, HSL(h: 0,   s: 0.80, l: 0.32)),  // dark red
+    ]
 
     static func nsColor(forUsed util: Double) -> NSColor {
         hsl(forUsed: util).toNSColor()
@@ -23,17 +30,20 @@ enum UsageColor {
     }
 
     private static func hsl(forUsed util: Double) -> HSL {
-        if util <= 60 { return warmOrange }
-        let t = min(max((util - 60) / 40, 0), 1)
-        // Hue: shortest path. 15° → 351° goes via 0°, i.e. -24°.
-        var dH = saturatedRed.h - warmOrange.h
-        if dH > 180 { dH -= 360 }
-        if dH < -180 { dH += 360 }
-        let h = (warmOrange.h + t * dH).truncatingRemainder(dividingBy: 360)
-        let normalizedH = h < 0 ? h + 360 : h
-        let s = warmOrange.s + t * (saturatedRed.s - warmOrange.s)
-        let l = warmOrange.l + t * (saturatedRed.l - warmOrange.l)
-        return HSL(h: normalizedH, s: s, l: l)
+        let p = min(max(util, 0), 100)
+        if p <= stops.first!.pct { return stops.first!.color }
+        if p >= stops.last!.pct { return stops.last!.color }
+        // Find the bracketing pair and lerp each HSL channel between them.
+        for i in 1..<stops.count where p <= stops[i].pct {
+            let lo = stops[i - 1], hi = stops[i]
+            let t = (p - lo.pct) / (hi.pct - lo.pct)
+            return HSL(
+                h: lo.color.h + t * (hi.color.h - lo.color.h),
+                s: lo.color.s + t * (hi.color.s - lo.color.s),
+                l: lo.color.l + t * (hi.color.l - lo.color.l)
+            )
+        }
+        return stops.last!.color
     }
 }
 
