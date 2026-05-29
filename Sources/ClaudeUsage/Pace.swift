@@ -5,36 +5,33 @@ import SwiftUI
 /// which lines up with 2 sessions/day × 7 days = 14 sessions = 100% weekly.
 private let weeklyPercentPerMaxedSession: Double = 7.0
 
-/// Realistic ceiling of maxed sessions per 24h. Two sessions of 5h with a 12h
-/// stride is the "I have a life" cadence; cranking to 4 means 20h/day grind.
-private let realisticSessionsPerDay: Double = 2.0
-
-/// 24h / 2 sessions = a new session slot every 12h.
-private let realisticHoursBetweenSessions: Double = 24.0 / realisticSessionsPerDay
-
 struct WeeklyPace {
     /// Sessions still needed to reach 100% weekly. 0 if already maxed.
     let sessionsToMax: Int
-    /// Sessions you can realistically fit in the remaining week at 2/day.
-    let realisticRemaining: Int
+    /// Sessions you're projected to still consume in the time left if you keep
+    /// burning at your current rate this week (util ÷ elapsed, over time left).
+    /// `nil` when it's too early in the window to project meaningfully (TBD).
+    let atCurrentPace: Int?
     /// True if the weekly window is already effectively maxed (≥95%).
     let isMaxed: Bool
 
-    /// Difference: positive means headroom (leaving tokens on table),
-    /// negative means we'd need to grind past 2/day to max.
-    var slack: Int { realisticRemaining - sessionsToMax }
+    /// Difference: positive means your current pace will carry you past max
+    /// (burning fast), negative means you'll fall short (leaving tokens on table).
+    var slack: Int? { atCurrentPace.map { $0 - sessionsToMax } }
 
     enum Verdict {
         case maxed
-        case onTrack       // realistic ≥ toMax — you can still max it if you want
+        case tooEarly      // < first 5% of the window — pace not yet meaningful
+        case onTrack       // current pace ≥ toMax — you'll reach max if you keep it up
         case close         // gap of 1-2 sessions
-        case leavingOnTable // realistic well below toMax — queue more work
+        case leavingOnTable // pace well below toMax — queue more work
     }
 
     var verdict: Verdict {
         if isMaxed { return .maxed }
-        if realisticRemaining >= sessionsToMax { return .onTrack }
-        if sessionsToMax - realisticRemaining <= 2 { return .close }
+        guard let pace = atCurrentPace else { return .tooEarly }
+        if pace >= sessionsToMax { return .onTrack }
+        if sessionsToMax - pace <= 2 { return .close }
         return .leavingOnTable
     }
 
@@ -43,6 +40,7 @@ struct WeeklyPace {
         case .maxed, .onTrack: return .green
         case .close: return .yellow
         case .leavingOnTable: return .blue
+        case .tooEarly: return .secondary
         }
     }
 
@@ -50,30 +48,44 @@ struct WeeklyPace {
         switch verdict {
         case .maxed:
             return "✓ Week maxed"
-        case .onTrack, .close, .leavingOnTable:
+        case .tooEarly, .onTrack, .close, .leavingOnTable:
             let s = sessionsToMax == 1 ? "session" : "sessions"
-            return "\(sessionsToMax) \(s) to max · ~\(realisticRemaining) realistic in time left"
+            let pace = atCurrentPace.map { "~\($0)" } ?? "TBD"
+            return "\(sessionsToMax) \(s) to max · \(pace) at current pace"
         }
     }
 }
 
 enum PaceCalculator {
-    static func compute(weeklyUtilization: Double?, resetsAt: Date?, now: Date) -> WeeklyPace? {
+    static func compute(
+        weeklyUtilization: Double?,
+        resetsAt: Date?,
+        windowDuration: TimeInterval,
+        now: Date
+    ) -> WeeklyPace? {
         guard let util = weeklyUtilization, let resetsAt else { return nil }
         let isMaxed = util >= 95
         let remainingPercent = max(0, 100 - util)
         let sessionsToMax = Int(ceil(remainingPercent / weeklyPercentPerMaxedSession))
 
-        let hoursLeft = max(0, resetsAt.timeIntervalSince(now) / 3600)
-        // floor((hoursLeft / 12) + 1) gives credit for the session you can start now,
-        // but capped at hoursLeft/5 since each session itself takes 5h to complete.
-        let slotsByCadence = floor(hoursLeft / realisticHoursBetweenSessions) + (hoursLeft >= 5 ? 1 : 0)
-        let slotsByDuration = floor(hoursLeft / 5.0)
-        let realistic = Int(min(slotsByCadence, slotsByDuration))
+        // Current pace: % burned per unit of elapsed window time, projected
+        // across the time still left. rate = util / elapsed; projected
+        // additional % = rate × timeLeft = util × (timeLeft / elapsed).
+        // In the first 5% of the window the divisor is tiny and the projection
+        // is wildly noisy, so we report TBD (nil) instead.
+        let secondsLeft = max(0, resetsAt.timeIntervalSince(now))
+        let elapsed = windowDuration - secondsLeft
+        let atCurrentPace: Int?
+        if elapsed / windowDuration < 0.05 {
+            atCurrentPace = nil
+        } else {
+            let projectedAdditionalPercent = util * (secondsLeft / elapsed)
+            atCurrentPace = max(0, Int((projectedAdditionalPercent / weeklyPercentPerMaxedSession).rounded()))
+        }
 
         return WeeklyPace(
             sessionsToMax: sessionsToMax,
-            realisticRemaining: max(0, realistic),
+            atCurrentPace: atCurrentPace,
             isMaxed: isMaxed
         )
     }
