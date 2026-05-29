@@ -66,7 +66,15 @@ final class UsageStore: ObservableObject {
             UsageCache.save(usage, at: now)
         } catch UsageAPIError.rateLimited(let retryAfter) {
             rateLimitedUntil = Date().addingTimeInterval(retryAfter)
-            state = .error("Rate limited. Retrying in \(Int(retryAfter))s.", Date())
+            // Don't flip to .error: the footer renders rate-limiting from
+            // `rateLimitedUntil`, and a stale .error would linger (with a red
+            // dot and a frozen countdown) after the window elapses. Keep the
+            // last good data on screen instead.
+            if let last = lastSuccess {
+                state = .loaded(last.response, last.at)
+            } else {
+                state = .idle
+            }
         } catch {
             state = .error(error.localizedDescription, Date())
         }
@@ -125,10 +133,10 @@ final class UsageStore: ObservableObject {
     }
 
     var lastUpdated: Date? {
-        switch state {
-        case .loaded(_, let d), .error(_, let d): return d
-        default: return lastSuccess?.at
-        }
+        // The displayed numbers come from `lastSuccess`, so "Updated …" should
+        // track the last successful fetch — not an error's timestamp.
+        if case .loaded(_, let d) = state { return d }
+        return lastSuccess?.at
     }
 
     var errorMessage: String? {
