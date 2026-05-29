@@ -90,6 +90,7 @@ struct PopoverView: View {
         let pace = PaceCalculator.compute(
             weeklyUtilization: window?.freshUtilization(now: now),
             resetsAt: UsageFormat.parseResetsAt(window?.resets_at),
+            windowDuration: Self.weeklyWindow,
             now: now
         )
         return VStack(alignment: .leading, spacing: 6) {
