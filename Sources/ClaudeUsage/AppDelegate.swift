@@ -2,27 +2,38 @@ import AppKit
 import Combine
 import SwiftUI
 
+/// Borderless panel that can still become key, so the SwiftUI controls inside
+/// (Refresh / Quit) receive clicks without activating the (accessory) app.
+private final class PopoverPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+}
+
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate {
     private let store = UsageStore()
     private var statusItem: NSStatusItem!
-    private var popover: NSPopover!
+    private var panel: PopoverPanel!
+    private var hostingController: NSHostingController<PopoverView>!
     private var cancellables: Set<AnyCancellable> = []
+    private var sizeObservation: NSKeyValueObservation?
+    private var clickMonitor: Any?
+
+    // Visual + motion tuning.
+    private let panelWidth: CGFloat = 280
+    private let cornerRadius: CGFloat = 12
+    private let tintOpacity: CGFloat = 0.7
+    private let slideDistance: CGFloat = 8
+    private let openDuration: TimeInterval = 0.16
+    private let closeDuration: TimeInterval = 0.12
 
     nonisolated override init() { super.init() }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.target = self
-        statusItem.button?.action = #selector(togglePopover(_:))
+        statusItem.button?.action = #selector(togglePanel(_:))
 
-        popover = NSPopover()
-        popover.behavior = .transient
-        popover.contentViewController = NSHostingController(
-            rootView: PopoverView(store: store)
-        )
-        popover.contentSize = NSSize(width: 280, height: 200)
-        popover.delegate = self
+        buildPanel()
 
         // objectWillChange fires before the @Published value is written, so
         // hop to the next runloop tick to read the post-write state.
@@ -33,6 +44,198 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         updateStatusItemTitle()
     }
+
+    // MARK: Panel construction
+
+    private func buildPanel() {
+        hostingController = NSHostingController(rootView: PopoverView(store: store))
+        // Report the SwiftUI ideal size as preferredContentSize so we can size
+        // the panel to the content (and resize-follow when it changes).
+        hostingController.sizingOptions = [.preferredContentSize]
+
+        // Rounded, vibrant background to replace the popover chrome we lose by
+        // going borderless. `.menu` is the most opaque public material, but the
+        // system Control Center panels (Wi-Fi / Sound) are more opaque/white
+        // still, so we wash the blur with a semi-opaque adaptive tint below.
+        let effect = NSVisualEffectView()
+        effect.material = .menu
+        effect.state = .active
+        effect.blendingMode = .behindWindow
+        // Round the blur via a resizable mask image — the documented way for
+        // NSVisualEffectView. (layer.cornerRadius on it is unreliable: square
+        // corners poke out during animation/resize.)
+        effect.maskImage = Self.roundedMaskImage(radius: cornerRadius)
+
+        // Opacity wash: in light mode a window-background fill over the blur
+        // lifts it toward the system panels' solidity. In dark mode the blur is
+        // already dark enough, so the tint is clear (off). Dynamic color, so it
+        // toggles automatically on appearance change. `tintOpacity` is the knob.
+        let opacity = tintOpacity
+        let tint = NSBox()
+        tint.boxType = .custom
+        tint.titlePosition = .noTitle
+        tint.borderWidth = 0
+        // Round the box to match the container. Relying on the effect view's
+        // masksToBounds to clip this subview is unreliable (square corners pop
+        // out during the open/resize animation), so the box rounds itself.
+        tint.cornerRadius = cornerRadius
+        tint.fillColor = NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+                ? .clear
+                : NSColor.windowBackgroundColor.withAlphaComponent(opacity)
+        }
+        tint.translatesAutoresizingMaskIntoConstraints = false
+
+        let host = hostingController.view
+        host.translatesAutoresizingMaskIntoConstraints = false
+        effect.addSubview(tint)
+        effect.addSubview(host)
+        NSLayoutConstraint.activate([
+            tint.leadingAnchor.constraint(equalTo: effect.leadingAnchor),
+            tint.trailingAnchor.constraint(equalTo: effect.trailingAnchor),
+            tint.topAnchor.constraint(equalTo: effect.topAnchor),
+            tint.bottomAnchor.constraint(equalTo: effect.bottomAnchor),
+            host.leadingAnchor.constraint(equalTo: effect.leadingAnchor),
+            host.trailingAnchor.constraint(equalTo: effect.trailingAnchor),
+            host.topAnchor.constraint(equalTo: effect.topAnchor),
+            host.bottomAnchor.constraint(equalTo: effect.bottomAnchor),
+        ])
+
+        panel = PopoverPanel(
+            contentRect: NSRect(x: 0, y: 0, width: panelWidth, height: 200),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.contentView = effect
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.level = .popUpMenu
+        panel.isFloatingPanel = true
+        panel.hidesOnDeactivate = false
+        panel.animationBehavior = .none           // we animate manually
+        panel.isReleasedWhenClosed = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+    }
+
+    /// A resizable rounded-rect mask: the center stretches and the corners stay
+    /// fixed (cap insets), so one image rounds the effect view at any size.
+    private static func roundedMaskImage(radius: CGFloat) -> NSImage {
+        let edge = radius * 2 + 1
+        let image = NSImage(size: NSSize(width: edge, height: edge), flipped: false) { rect in
+            NSColor.black.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+            return true
+        }
+        image.capInsets = NSEdgeInsets(top: radius, left: radius, bottom: radius, right: radius)
+        image.resizingMode = .stretch
+        return image
+    }
+
+    // MARK: Show / hide
+
+    @objc private func togglePanel(_ sender: Any?) {
+        if panel.isVisible {
+            closePanel()
+        } else {
+            showPanel()
+        }
+    }
+
+    private func showPanel() {
+        // Size to the SwiftUI content's intrinsic size.
+        hostingController.view.layoutSubtreeIfNeeded()
+        var size = hostingController.view.fittingSize
+        if size.width < 1 || size.height < 1 { size = NSSize(width: panelWidth, height: 200) }
+        panel.setContentSize(size)
+
+        guard let finalOrigin = panelOrigin(for: panel.frame.size) else {
+            panel.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        // Start tucked up under the menu bar and transparent, then slide down
+        // and fade in. The fade masks the few px that briefly overlap the bar.
+        panel.setFrameOrigin(NSPoint(x: finalOrigin.x, y: finalOrigin.y + slideDistance))
+        panel.alphaValue = 0
+        panel.makeKeyAndOrderFront(nil)
+        statusItem.button?.highlight(true)
+
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = openDuration
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().setFrameOrigin(finalOrigin)
+            panel.animator().alphaValue = 1
+        }
+
+        // When a refresh adds/removes a row the content height changes; keep the
+        // panel pinned just under the menu bar instead of drifting.
+        sizeObservation = hostingController.observe(\.preferredContentSize, options: [.new]) { [weak self] _, _ in
+            Task { @MainActor in self?.followContentSize() }
+        }
+
+        // Transient dismissal: a mouse-down anywhere outside this app (another
+        // app, the desktop, other menu-bar items) closes the panel. Clicks
+        // inside the panel and on our own status item are local events and
+        // don't reach a global monitor, so they don't double-toggle.
+        clickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            Task { @MainActor in self?.closePanel() }
+        }
+    }
+
+    private func followContentSize() {
+        guard panel.isVisible else { return }
+        let size = hostingController.preferredContentSize
+        guard size.width > 0, size.height > 0 else { return }
+        panel.setContentSize(size)
+        if let origin = panelOrigin(for: panel.frame.size) {
+            panel.setFrameOrigin(origin)
+        }
+    }
+
+    private func closePanel() {
+        guard panel.isVisible else { return }
+        if let m = clickMonitor { NSEvent.removeMonitor(m); clickMonitor = nil }
+        sizeObservation?.invalidate(); sizeObservation = nil
+        statusItem.button?.highlight(false)
+
+        let up = NSPoint(x: panel.frame.origin.x, y: panel.frame.origin.y + slideDistance)
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = closeDuration
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            panel.animator().setFrameOrigin(up)
+            panel.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            // Runs on the main thread once the animation finishes.
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.panel.orderOut(nil)
+                self.panel.alphaValue = 1
+            }
+        })
+    }
+
+    /// Final origin: top edge just below the menu bar, centered under the status
+    /// item, clamped on-screen. Screen-coordinate math is flip-independent and
+    /// sidesteps the Tahoe anchor-rect mis-placement that plagued NSPopover.
+    private func panelOrigin(for size: NSSize) -> NSPoint? {
+        guard let button = statusItem.button,
+              let buttonWindow = button.window,
+              let screen = buttonWindow.screen
+        else { return nil }
+
+        let buttonInScreen = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
+        let topEdge = screen.visibleFrame.maxY          // first point below the menu bar
+        var origin = NSPoint(x: buttonInScreen.midX - size.width / 2, y: topEdge - size.height)
+
+        let minX = screen.visibleFrame.minX
+        let maxX = screen.visibleFrame.maxX - size.width
+        origin.x = min(max(origin.x, minX), maxX)
+        return origin
+    }
+
+    // MARK: Menubar title
 
     private func updateStatusItemTitle() {
         guard let button = statusItem.button else { return }
@@ -52,80 +255,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             .shadow: shadow,
         ]
         button.attributedTitle = NSAttributedString(string: label.text, attributes: attrs)
-    }
-
-    @objc private func togglePopover(_ sender: Any?) {
-        guard let button = statusItem.button else { return }
-        if popover.isShown {
-            popover.performClose(sender)
-            return
-        }
-
-        // Let AppKit place the popover first…
-        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-        popover.contentViewController?.view.window?.makeKey()
-
-        // …then put it exactly where we want it, and keep it there. The popover's
-        // height is driven by SwiftUI's intrinsic content, so a refresh that
-        // adds/removes a row (loading spinner, rate-limit/error notice, per-model
-        // sections) resizes the window. We reposition on every resize, otherwise
-        // the one-shot origin goes stale and the growing popover drifts up over
-        // the menu bar.
-        positionPopover()
-        if let popoverWindow = popover.contentViewController?.view.window {
-            NotificationCenter.default.removeObserver(
-                self, name: NSWindow.didResizeNotification, object: popoverWindow)
-            NotificationCenter.default.addObserver(
-                self, selector: #selector(popoverWindowDidResize(_:)),
-                name: NSWindow.didResizeNotification, object: popoverWindow)
-        }
-    }
-
-    @objc private func popoverWindowDidResize(_ note: Notification) {
-        guard popover.isShown else { return }
-        positionPopover()
-    }
-
-    // The popover window is torn down and recreated across opens (.transient),
-    // so drop the resize observer on close — otherwise it dangles on a dead
-    // window. This is the only didResizeNotification observer we register, so
-    // removing by name (object: nil) is safe.
-    func popoverDidClose(_ notification: Notification) {
-        NotificationCenter.default.removeObserver(
-            self, name: NSWindow.didResizeNotification, object: nil)
-    }
-
-    /// Pins the popover just below the menu bar, centered under the status item.
-    /// On macOS 26 (Tahoe) the menu bar is taller than the status-item button's
-    /// window and AppKit's anchor-rect math mis-places the popover (it ends up
-    /// overlapping / above the bar). Working in screen coordinates is
-    /// flip-independent and doesn't depend on AppKit honoring preferredEdge.
-    private func positionPopover() {
-        guard let button = statusItem.button,
-              let popoverWindow = popover.contentViewController?.view.window,
-              let buttonWindow = button.window,
-              let screen = buttonWindow.screen
-        else { return }
-
-        let buttonInScreen = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
-        let popoverSize = popoverWindow.frame.size
-
-        // visibleFrame.maxY is the first point below the menu bar.
-        let topEdge = screen.visibleFrame.maxY
-        var origin = NSPoint(
-            x: buttonInScreen.midX - popoverSize.width / 2,
-            y: topEdge - popoverSize.height
-        )
-
-        // Keep it on-screen horizontally.
-        let minX = screen.visibleFrame.minX
-        let maxX = screen.visibleFrame.maxX - popoverSize.width
-        origin.x = min(max(origin.x, minX), maxX)
-
-        // setFrameOrigin only moves the window (no resize), so this won't loop
-        // back through didResize. Skip redundant sets just in case.
-        if popoverWindow.frame.origin != origin {
-            popoverWindow.setFrameOrigin(origin)
-        }
     }
 }

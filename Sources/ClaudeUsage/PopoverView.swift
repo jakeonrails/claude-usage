@@ -94,7 +94,7 @@ struct PopoverView: View {
             now: now
         )
         return VStack(alignment: .leading, spacing: 6) {
-            weeklySection(title: "Weekly · All models", window: window, percentSize: 18, percentWeight: .medium)
+            weeklySection(title: "Weekly · All models", window: window, percentSize: 22, percentWeight: .semibold)
             if let pace {
                 HStack(spacing: 6) {
                     Circle()
