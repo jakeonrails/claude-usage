@@ -145,19 +145,26 @@ final class UsageStore: ObservableObject {
     }
 
     /// Menubar text + NSColor for the 5-hour window.
-    /// We display percentage USED. Color comes from `UsageColor`: a smooth
-    /// green→yellow→orange→red→dark-red gradient keyed to the percentage.
+    /// We display percentage USED. For an active window the server may report no
+    /// `utilization` until something is consumed; we show that as `0%` rather
+    /// than `…`. Color: `0%` uses the system label color so it blends with the
+    /// rest of the menu bar; above 0% it's the `UsageColor`
+    /// green→yellow→orange→red→dark-red gradient.
     var menubarLabel: (text: String, color: NSColor) {
-        guard let util = fiveHour?.freshUtilization() else {
-            // No cached data at all. Distinguish "waiting on rate limit" from
-            // a hard error so the user knows whether to act.
-            if let until = rateLimitedUntil, until > Date() { return ("⏳", .secondaryLabelColor) }
-            if case .error = state { return ("!", .systemRed) }
-            return ("…", .secondaryLabelColor)
+        // An active (not-yet-reset) window: show its percentage, treating a
+        // missing utilization as 0% used.
+        if let window = fiveHour,
+           let resets = UsageFormat.parseResetsAt(window.resets_at), resets > Date() {
+            let used = max(0, min(100, window.utilization ?? 0))
+            let rounded = Int(used.rounded())
+            let color = rounded == 0 ? NSColor.labelColor : UsageColor.nsColor(forUsed: used)
+            return ("\(rounded)%", color)
         }
-        let used = max(0, min(100, util))
-        let text = "\(Int(used.rounded()))%"
-        return (text, UsageColor.nsColor(forUsed: used))
+        // No fresh data. Distinguish "waiting on rate limit" from a hard error
+        // so the user knows whether to act.
+        if let until = rateLimitedUntil, until > Date() { return ("⏳", .secondaryLabelColor) }
+        if case .error = state { return ("!", .systemRed) }
+        return ("…", .secondaryLabelColor)
     }
 }
 
