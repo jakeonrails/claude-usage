@@ -77,7 +77,8 @@ stale entries pile up in its ACL.
 In **Keychain Access.app**: menu → *Certificate Assistant* → *Create a
 Certificate…*
 
-- **Name:** `ClaudeUsage Self-Signed`
+- **Name:** `Claude Usage` — see the note below; this is what shows up in
+  **Login Items**.
 - **Identity Type:** Self Signed Root
 - **Certificate Type:** Code Signing
 - Check **Let me override defaults**, then bump **Validity Period** to
@@ -86,6 +87,15 @@ Certificate…*
 
 The cert and its private key land in your login keychain. You only do this
 once per machine.
+
+> **The cert's name is what macOS shows in Login Items.** The entry under
+> *System Settings → General → Login Items → Allow in the Background* is
+> labeled by the signing certificate's Common Name — **not** by the app's
+> `CFBundleDisplayName`. If you sign with a personal Apple Developer cert (or
+> name the self-signed cert after yourself), Login Items will show *your name*
+> instead of the app's. Naming the cert `Claude Usage` makes the entry read
+> "Claude Usage". Whatever you name it, point the build at it with
+> `SIGN_IDENTITY` (see below) — the default is `ClaudeUsage Self-Signed`.
 
 ### Build the app
 
@@ -98,8 +108,10 @@ The script:
 - runs `swift build -c release`
 - assembles `ClaudeUsage.app/` with a proper `Info.plist` (`LSUIElement` so it
   doesn't show in the Dock)
-- code-signs with the `ClaudeUsage Self-Signed` identity (override via
-  `SIGN_IDENTITY=… ./build-app.sh` if you used a different cert name)
+- code-signs with the `ClaudeUsage Self-Signed` identity. Override the cert
+  name with `SIGN_IDENTITY="Claude Usage" ./build-app.sh`, or put
+  `SIGN_IDENTITY="Claude Usage"` in a gitignored `.env` (the script sources it
+  automatically). The identity you sign with is what appears in Login Items.
 
 The signature pins the Keychain ACL to the cert's hash, so the ACL entry
 survives any number of rebuilds as long as you keep using the same cert.

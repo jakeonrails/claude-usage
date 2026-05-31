@@ -39,6 +39,8 @@ UI rendering: `UsageColor.swift` interpolates HSL across a multi-stop gradient k
 
 `SIGN_IDENTITY` lives in `.env` (gitignored — it contains a personal email + Team ID). `build-app.sh` sources `.env` if present. In Conductor workspaces, `bin/conductor-setup` (run via `conductor.json`'s `setup` script) symlinks `.env` from `$CONDUCTOR_ROOT_PATH` so each workspace can sign with the same cert.
 
+The signing cert's **Common Name is what macOS shows in Login Items** (*System Settings → Login Items → Allow in the Background*) — *not* `CFBundleDisplayName`. The repo's `.env` sets `SIGN_IDENTITY="Claude Usage"` (a self-signed cert whose CN is "Claude Usage") so the entry reads "Claude Usage" rather than a personal Apple-dev-cert name. If a fresh checkout follows the default and signs with `ClaudeUsage Self-Signed`, Login Items will read that instead — harmless, just a different label.
+
 To create the cert: Keychain Access → Certificate Assistant → Create a Certificate, Self Signed Root + Code Signing, long validity (e.g. 3650 days — when it expires, codesign verification fails and the prompts return).
 
 ## Things to know before editing
