@@ -109,9 +109,10 @@ The script:
 - assembles `ClaudeUsage.app/` with a proper `Info.plist` (`LSUIElement` so it
   doesn't show in the Dock)
 - code-signs with the `ClaudeUsage Self-Signed` identity. Override the cert
-  name with `SIGN_IDENTITY="Claude Usage" ./build-app.sh`, or put
-  `SIGN_IDENTITY="Claude Usage"` in a gitignored `.env` (the script sources it
-  automatically). The identity you sign with is what appears in Login Items.
+  name with `SIGN_IDENTITY="Claude Usage" ./build-app.sh`, or `cp .env.example
+  .env` and set it there (the script sources `.env` automatically; `.env` is
+  gitignored). The identity you sign with is what appears in Login Items —
+  see [`.env.example`](.env.example) for details.
 
 The signature pins the Keychain ACL to the cert's hash, so the ACL entry
 survives any number of rebuilds as long as you keep using the same cert.
