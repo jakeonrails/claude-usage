@@ -10,6 +10,14 @@ struct PopoverView: View {
     private static let weeklyWindow: TimeInterval = 7 * 86_400
 
     var body: some View {
+        if store.needsConnection {
+            ConnectAccountView(store: store)
+        } else {
+            connectedBody
+        }
+    }
+
+    private var connectedBody: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
 
@@ -170,6 +178,20 @@ struct PopoverView: View {
                         .lineLimit(3)
                 }
             }
+            // /oauth/usage doesn't return the standard
+            // `anthropic-ratelimit-requests-*` headers, so only render this
+            // row when we actually have non-empty values to show (e.g.
+            // a future API change or while a 429 cooldown is active).
+            if let rl = store.lastRateLimit,
+               (rl.requestsRemaining != nil || rl.requestsLimit != nil || rl.resetAt != nil) {
+                let rem = rl.requestsRemaining.map(String.init) ?? "?"
+                let lim = rl.requestsLimit.map(String.init) ?? "?"
+                let resetIn = rl.resetAt.map { UsageFormat.compactDuration(until: $0, now: now) } ?? "?"
+                Text("API budget: \(rem)/\(lim) · resets in \(resetIn)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
             HStack {
                 if let last = store.lastUpdated {
                     Text("Updated \(last.formatted(.dateTime.hour().minute().second()))")
@@ -177,10 +199,25 @@ struct PopoverView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
+                if let next = store.nextRefreshAt, next > now {
+                    Text("Next in \(UsageFormat.compactDuration(until: next, now: now))")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+            HStack {
+                Spacer()
                 refreshButton
                     .controlSize(.small)
-                Button("Quit") { NSApp.terminate(nil) }
-                    .controlSize(.small)
+                Menu {
+                    Button("Disconnect account") { store.disconnect() }
+                    Button("Quit") { NSApp.terminate(nil) }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
             }
         }
     }
@@ -188,16 +225,18 @@ struct PopoverView: View {
     private var refreshButton: some View {
         let isLoading = { if case .loading = store.state { return true }; return false }()
         let rateLimited = (store.rateLimitedUntil ?? .distantPast) > now
-        let disabled = isLoading || rateLimited
         let tip: String = {
             if isLoading { return "Refreshing…" }
             if rateLimited, let until = store.rateLimitedUntil {
-                return "Rate limited — auto-retries in \(UsageFormat.compactDuration(until: until, now: now))"
+                return "Rate limited — click to force a token rotation (auto-retries in \(UsageFormat.compactDuration(until: until, now: now)))"
             }
             return "Fetch usage now"
         }()
-        return Button("Refresh") { Task { await store.refresh() } }
-            .disabled(disabled)
+        // `force: true` bypasses both the rate-limit gate and the
+        // refresh-on-429 cooldown so manual clicks can always reset the
+        // per-token budget on demand.
+        return Button("Refresh") { Task { await store.refresh(force: true) } }
+            .disabled(isLoading)
             .help(tip)
     }
 
