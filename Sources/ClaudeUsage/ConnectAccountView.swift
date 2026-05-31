@@ -34,6 +34,7 @@ struct ConnectAccountView: View {
                     }
                     .frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.borderedProminent)
                 .controlSize(.regular)
             }
 
@@ -62,6 +63,16 @@ struct ConnectAccountView: View {
                     .font(.caption)
                     .foregroundStyle(.red)
                     .lineLimit(4)
+            }
+
+            Divider()
+
+            HStack {
+                Spacer()
+                Button("Quit") {
+                    NSApplication.shared.terminate(nil)
+                }
+                .controlSize(.regular)
             }
         }
         .padding(14)
