@@ -20,31 +20,47 @@ left, color-coded.
   window — fill past the tick means you're burning quota faster than the clock.
 - The weekly section also shows a pace line: how many maxed sessions you'd need to
   hit 100%, and how many you're on track for at your current burn rate.
-- Refreshes about every two minutes (rate-limit aware, so it stays under
-  Anthropic's usage-endpoint cap).
+- Refreshes about every five minutes. The usage endpoint is rate-limited
+  **per access token**, so on a 429 the app rotates its OAuth token (which
+  resets the budget) and retries — see *How it gets the data* below.
 - OAuth access tokens are refreshed automatically (proactively when expired,
-  or on a 401 from the usage endpoint), and the rotated tokens are written
-  back to the same Keychain item Claude Code uses.
+  on a 401, or on a 429), and the rotated tokens are written back to the app's
+  own Keychain item.
 
 ## How it gets the data
 
-It reuses your already-authenticated Claude Code session — no separate login,
-no cookie copying. On each refresh it:
+The app runs its **own** OAuth login against Claude and stores the resulting
+tokens in its own Keychain item (`ClaudeUsage-credentials`) — separate from the
+`Claude Code-credentials` item the `claude` CLI uses. It does **not** read or
+write Claude Code's credentials.
 
-1. Reads the OAuth token from your macOS Keychain item `Claude Code-credentials`
-   (the same item Claude Code itself writes), by shelling out to
-   `/usr/bin/security` — which is already on that item's trusted-app list, so it
-   doesn't trigger an extra Keychain prompt.
+> **Why a separate login?** The usage endpoint rate-limits per access token
+> (~5 requests before a 429 with a long Retry-After). Resetting that budget
+> means rotating the token. If we rotated Claude Code's shared token we'd race
+> the CLI's own one-time-use refresh and break its auth — so the app owns its
+> tokens instead, and can rotate freely.
+
+**First run — connect your account:** the popover shows a *Connect your Claude
+account* screen.
+
+1. Click **Open Anthropic sign-in**. Your browser opens to Claude's OAuth
+   consent page.
+2. Approve. You'll land on a page showing an authorization code (formatted
+   `code#state`).
+3. Copy the whole string, paste it into the app's field, and click **Connect**.
+
+The app exchanges that code for an access + refresh token pair, stores them in
+`ClaudeUsage-credentials`, and starts polling. You can re-link or switch
+accounts anytime via the **⋯ → Disconnect account** menu in the popover.
+
+On each refresh it then:
+
+1. Reads the OAuth token from `ClaudeUsage-credentials`.
 2. Calls `https://api.anthropic.com/api/oauth/usage` with that token.
 3. Parses `five_hour`, `seven_day`, `seven_day_opus`, `seven_day_sonnet`.
 
-Because the read goes through `/usr/bin/security` (already trusted on that
-keychain item), it normally won't prompt at all. If macOS does show a Keychain
-Access dialog asking permission to read `Claude Code-credentials`, click
-**Always Allow** and it'll be silent thereafter.
-
-If you've never signed into Claude Code on this Mac, the app will show an
-error in its popup explaining the credentials weren't found.
+No separate Anthropic developer registration is needed — the OAuth flow reuses
+the same public `client_id` and hosted redirect the `claude` CLI itself uses.
 
 ## Build
 
@@ -52,11 +68,11 @@ Requires macOS 14+ and Xcode 15 / Swift 5.9+.
 
 ### One-time: create a code signing identity
 
-The build signs the app with a self-signed identity so the Keychain ACL on
-`Claude Code-credentials` stays valid across rebuilds. Without this, every
-`./build-app.sh` produces a different cdhash and macOS treats it as a "new
-app" — you'd have to click **Always Allow** on every rebuild, and stale
-entries pile up in the keychain item's ACL.
+The build signs the app with a self-signed identity so the Keychain ACL on the
+app's `ClaudeUsage-credentials` item stays valid across rebuilds. Without this,
+every `./build-app.sh` produces a different cdhash and macOS treats it as a
+"new app" — you'd have to re-authorize the keychain item on every rebuild, and
+stale entries pile up in its ACL.
 
 In **Keychain Access.app**: menu → *Certificate Assistant* → *Create a
 Certificate…*
@@ -90,8 +106,9 @@ survives any number of rebuilds as long as you keep using the same cert.
 
 For development you can also just `swift run`, but that produces an unsigned
 binary — the menubar still works (the app calls
-`NSApplication.setActivationPolicy(.accessory)`), but you'll be prompted on
-the first keychain read of every fresh `swift run` invocation.
+`NSApplication.setActivationPolicy(.accessory)`), but because the cdhash
+changes each build you may be re-prompted to authorize the keychain item, and
+in some cases have to reconnect your account.
 
 ## Install
 
@@ -133,9 +150,11 @@ PLIST
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.jakemoffatt.claudeusage.plist
 ```
 
-The first time it runs, macOS may show one Keychain Access dialog asking
-to read `Claude Code-credentials`. Click **Always Allow** and it'll be
-silent thereafter.
+The first time it runs, the popover shows the *Connect your Claude account*
+screen — follow the OAuth steps in [How it gets the data](#how-it-gets-the-data).
+macOS may also show a Keychain Access dialog when the app first writes its
+`ClaudeUsage-credentials` item; click **Always Allow** and it'll be silent
+thereafter.
 
 The LaunchAgent shows up in **System Settings → General → Login Items →
 Allow in the Background** (toggleable from the UI if you want to disable
@@ -154,6 +173,10 @@ rm -rf /Applications/ClaudeUsage.app
 - The 5-hour and weekly *limits* are enforced server-side by Anthropic. This
   app just reads the percentage Anthropic returns; it does not compute its
   own session windows from local JSONL.
-- The keychain read shells out to `/usr/bin/security` rather than calling
-  `SecItemCopyMatching` directly. On macOS 15+ this is what keeps the ACL
-  "Always Allow" sticky across token rotations without re-prompting.
+- The app reads and writes its own `ClaudeUsage-credentials` Keychain item via
+  the `SecItem` APIs directly (no `/usr/bin/security` shellout). Because the
+  app is the only writer of that item, stable code-signing alone keeps the ACL
+  sticky across token rotations — unlike the shared `Claude Code-credentials`
+  item, which several tools write and which needed the `security` workaround.
+- Tokens are obtained through the app's own OAuth login, so it never touches
+  Claude Code's credentials and can't interfere with the `claude` CLI's auth.
