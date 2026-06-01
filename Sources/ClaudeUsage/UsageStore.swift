@@ -233,6 +233,12 @@ final class UsageStore: ObservableObject {
         // No fresh data. Distinguish the various "no data" states so the user
         // knows whether to click and act.
         if needsConnection { return ("🔗", .secondaryLabelColor) }
+        // Between sessions: the API answered successfully but the previous
+        // 5-hour window has reset and no new one has started. True usage right
+        // now is 0% — reserve "…" for genuinely missing data.
+        if lastSuccess != nil {
+            return ("0%", .labelColor)
+        }
         if let until = rateLimitedUntil, until > Date() { return ("⏳", .secondaryLabelColor) }
         if case .error = state { return ("!", .systemRed) }
         return ("…", .secondaryLabelColor)
