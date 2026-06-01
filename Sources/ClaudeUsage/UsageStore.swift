@@ -160,6 +160,12 @@ final class UsageStore: ObservableObject {
             let color = rounded == 0 ? NSColor.labelColor : UsageColor.nsColor(forUsed: used)
             return ("\(rounded)%", color)
         }
+        // Between sessions: the API answered successfully but the previous
+        // 5-hour window has reset and no new one has started. True usage right
+        // now is 0% — reserve "…" for genuinely missing data.
+        if lastSuccess != nil {
+            return ("0%", .labelColor)
+        }
         // No fresh data. Distinguish "waiting on rate limit" from a hard error
         // so the user knows whether to act.
         if let until = rateLimitedUntil, until > Date() { return ("⏳", .secondaryLabelColor) }
