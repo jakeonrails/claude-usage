@@ -3,9 +3,19 @@
 A tiny macOS menubar app that shows how much Claude Code session quota you have
 left, color-coded.
 
+The popover adapts to your macOS version's window styling. On **macOS Tahoe (26)
+and later**:
+
 <p>
-  <img width="300" alt="Claude Code Usage popover — light mode" src="docs/Light.png" />
-  <img width="300" alt="Claude Code Usage popover — dark mode" src="docs/Dark.png" />
+  <img width="300" alt="Claude Code Usage popover — light mode, macOS Tahoe" src="docs/Light.png" />
+  <img width="300" alt="Claude Code Usage popover — dark mode, macOS Tahoe" src="docs/Dark.png" />
+</p>
+
+On **macOS Sonoma (14) and Sequoia (15)**:
+
+<p>
+  <img width="300" alt="Claude Code Usage popover — light mode, macOS Sonoma" src="docs/Light-Sonoma.png" />
+  <img width="300" alt="Claude Code Usage popover — dark mode, macOS Sonoma" src="docs/Dark-Sonoma.png" />
 </p>
 
 - Menubar text: percentage **used** in your current 5-hour session.
