@@ -129,7 +129,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.hidesOnDeactivate = false
         panel.animationBehavior = .none           // we animate manually
         panel.isReleasedWhenClosed = false
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        // .moveToActiveSpace (not .canJoinAllSpaces) so the panel follows the
+        // user to whichever Space they're currently viewing. With
+        // .canJoinAllSpaces, AppKit remembers the Space the panel was last
+        // visible on and re-shows it there after orderOut, which puts the
+        // popover off-screen when invoked from any non-primary Space.
+        panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary, .stationary]
     }
 
     /// A resizable rounded-rect mask: the center stretches and the corners stay
