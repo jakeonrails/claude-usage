@@ -93,13 +93,16 @@ done
 
 # 2. Ensure the popover is open. The status-item click is a *toggle*, so we
 #    detect the popover first (via the Swift finder) and only click if it's
-#    closed — that keeps consecutive runs idempotent. Accessory apps expose the
-#    status item as menu bar item 1 of menu bar 1.
+#    closed — that keeps consecutive runs idempotent. The status item lives in
+#    the *last* menu bar: a bare accessory app has only the status menu bar
+#    (menu bar 1), but ClaudeUsage also installs a main menu (the Edit menu for
+#    paste), which becomes menu bar 1 and pushes the status bar to menu bar 2.
+#    Targeting `menu bar (count of menu bars)` works either way.
 click_status_item() {
   osascript >/dev/null <<'APPLESCRIPT'
 tell application "System Events"
   tell process "ClaudeUsage"
-    click menu bar item 1 of menu bar 1
+    click menu bar item 1 of menu bar (count of menu bars)
   end tell
 end tell
 APPLESCRIPT
