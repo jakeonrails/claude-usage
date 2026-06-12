@@ -211,6 +211,9 @@ struct PopoverView: View {
                 refreshButton
                     .controlSize(.small)
                 Menu {
+                    Toggle("Invert menu bar colors", isOn: $store.invertMenubarColors)
+                        .help("On: solid color block behind the percentage. Off: colored text on the bare menu bar.")
+                    Divider()
                     Button("Disconnect account") { store.disconnect() }
                     Button("Quit") { NSApp.terminate(nil) }
                 } label: {

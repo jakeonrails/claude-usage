@@ -4,7 +4,8 @@ A tiny macOS menubar app that shows how much Claude Code session quota you have
 left, color-coded.
 
 The popover adapts to your macOS version's window styling. On **macOS Tahoe (26)
-and later**:
+and later** (these shots predate the menubar color block and show the older
+colored-text readout — they need a Tahoe machine to recapture):
 
 <p>
   <img width="300" alt="Claude Code Usage popover — light mode, macOS Tahoe" src="docs/Light.png" />
