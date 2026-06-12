@@ -36,6 +36,27 @@ enum OAuth {
         }
     }
 
+    /// Refresh the token pair and persist the rotated credentials to our
+    /// keychain item. Shared by the menubar store and the `--json` CLI mode so
+    /// both rotate tokens identically (we're the only writer of the item).
+    static func refreshAndPersist(using creds: ClaudeCredentials) async throws -> ClaudeCredentials {
+        guard let rt = creds.refreshToken else { throw KeychainError.missingRefreshToken }
+        let token = try await refresh(refreshToken: rt)
+        let newExpiresMs: Int64? = token.expires_in.map {
+            Int64(Date().timeIntervalSince1970 * 1000) + Int64($0) * 1000
+        }
+        try AppCredentials.save(
+            accessToken: token.access_token,
+            refreshToken: token.refresh_token ?? creds.refreshToken,
+            expiresAtMs: newExpiresMs ?? creds.expiresAtMs
+        )
+        return ClaudeCredentials(
+            accessToken: token.access_token,
+            refreshToken: token.refresh_token ?? creds.refreshToken,
+            expiresAtMs: newExpiresMs ?? creds.expiresAtMs
+        )
+    }
+
     static func refresh(refreshToken: String) async throws -> TokenResponse {
         var req = URLRequest(url: tokenEndpoint)
         req.httpMethod = "POST"

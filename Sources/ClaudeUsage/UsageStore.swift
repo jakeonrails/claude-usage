@@ -125,13 +125,13 @@ final class UsageStore: ObservableObject {
         }
 
         if creds.isExpired() {
-            creds = try await refreshAndPersist(using: creds)
+            creds = try await OAuth.refreshAndPersist(using: creds)
         }
 
         do {
             return try await UsageAPI.fetch(accessToken: creds.accessToken)
         } catch UsageAPIError.http(401, _) {
-            creds = try await refreshAndPersist(using: creds)
+            creds = try await OAuth.refreshAndPersist(using: creds)
             return try await UsageAPI.fetch(accessToken: creds.accessToken)
         } catch UsageAPIError.rateLimited(let retryAfter) {
             // Only attempt the token-rotation workaround if we haven't tried
@@ -145,27 +145,9 @@ final class UsageStore: ObservableObject {
                 "[ClaudeUsage] 429 received — rotating OAuth token to reset per-token budget\n".utf8
             ))
             lastRefreshOnRateLimit = Date()
-            creds = try await refreshAndPersist(using: creds)
+            creds = try await OAuth.refreshAndPersist(using: creds)
             return try await UsageAPI.fetch(accessToken: creds.accessToken)
         }
-    }
-
-    private func refreshAndPersist(using creds: ClaudeCredentials) async throws -> ClaudeCredentials {
-        guard let rt = creds.refreshToken else { throw KeychainError.missingRefreshToken }
-        let token = try await OAuth.refresh(refreshToken: rt)
-        let newExpiresMs: Int64? = token.expires_in.map {
-            Int64(Date().timeIntervalSince1970 * 1000) + Int64($0) * 1000
-        }
-        try AppCredentials.save(
-            accessToken: token.access_token,
-            refreshToken: token.refresh_token ?? creds.refreshToken,
-            expiresAtMs: newExpiresMs ?? creds.expiresAtMs
-        )
-        return ClaudeCredentials(
-            accessToken: token.access_token,
-            refreshToken: token.refresh_token ?? creds.refreshToken,
-            expiresAtMs: newExpiresMs ?? creds.expiresAtMs
-        )
     }
 
     /// Called by ConnectAccountView after a successful OAuth exchange.

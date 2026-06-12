@@ -57,6 +57,11 @@ enum UsageAPI {
     /// Most recent rate-limit headers observed. Read after each fetch.
     static private(set) var lastRateLimit: RateLimitInfo?
 
+    /// Where diagnostic lines go. The menubar app keeps the default (stdout →
+    /// /tmp/claudeusage.out.log under the LaunchAgent); `--json` mode points
+    /// this at stderr so stdout stays pure JSON.
+    static var logHandle: FileHandle = .standardOutput
+
     private static func parseRateLimit(_ http: HTTPURLResponse) -> RateLimitInfo {
         let remaining = (http.value(forHTTPHeaderField: "anthropic-ratelimit-requests-remaining"))
             .flatMap { Int($0) }
@@ -80,7 +85,7 @@ enum UsageAPI {
         let retryAfter = http.value(forHTTPHeaderField: "Retry-After")
             ?? http.value(forHTTPHeaderField: "retry-after") ?? "-"
         let line = "[ClaudeUsage] usage \(status) rl=\(rem)/\(lim) reset=\(resetIn) retry-after=\(retryAfter)\n"
-        FileHandle.standardOutput.write(Data(line.utf8))
+        logHandle.write(Data(line.utf8))
     }
 
     static func fetch(accessToken: String) async throws -> UsageResponse {

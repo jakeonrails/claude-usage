@@ -72,6 +72,72 @@ On each refresh it then:
 No separate Anthropic developer registration is needed — the OAuth flow reuses
 the same public `client_id` and hosted redirect the `claude` CLI itself uses.
 
+## JSON output for scripts (`--json`)
+
+Other programs can read the current usage — percent used/remaining and time
+elapsed/remaining per window — without doing their own OAuth:
+
+```bash
+/Applications/ClaudeUsage.app/Contents/MacOS/ClaudeUsage --json
+```
+
+```json
+{
+  "source": "cache",
+  "stale": false,
+  "fetched_at": "2026-06-12T16:16:42Z",
+  "age_seconds": 147,
+  "five_hour": {
+    "active": true,
+    "used_percent": 40,
+    "remaining_percent": 60,
+    "resets_at": "2026-06-12T19:09:59.931478+00:00",
+    "window_seconds": 18000,
+    "elapsed_seconds": 7750,
+    "remaining_seconds": 10250
+  },
+  "seven_day": { "...": "same shape" },
+  "seven_day_sonnet": { "...": "same shape, present only on plans that report it" },
+  "extra_usage": { "enabled": false }
+}
+```
+
+Useful for agents/schedulers deciding how big a task to take on, e.g.
+*"only start if ≥50% of the session remains"*:
+
+```bash
+ClaudeUsage --json | jq -e '.five_hour.remaining_percent >= 50' >/dev/null && start-big-task
+```
+
+**It does not add API traffic.** The command is cache-first: the menubar app
+already refreshes an on-disk snapshot every 5 minutes
+(`~/Library/Application Support/ClaudeUsage/last_usage.json`), and `--json`
+serves that file while it's fresher than `--max-age` (default 360 s — one app
+poll interval plus grace). While the app is running, polling `--json` is a
+pure file read: no keychain, no network. Only when the cache is stale (the
+app isn't running) does the CLI fetch from the API itself — using the same
+keychain credentials and token-rotation-on-429 logic as the app — and it
+writes the result back to the cache for the next caller.
+
+Flags and exit codes:
+
+| | |
+|---|---|
+| `--max-age <seconds>` | serve cached data up to this old (default 360) |
+| `--fresh` | skip the cache and fetch now (burns rate-limit budget) |
+| exit 0 | data printed, from cache or API |
+| exit 2 | not connected — open the app and connect your account |
+| exit 3 | fetch failed; *stale* cache printed (`"stale": true` + `"error"`) |
+| exit 1 | fetch failed and no cache exists (error JSON on stderr) |
+
+A window that has reset with no new one started reports `"active": false` and
+`used_percent: 0`. Windows your plan doesn't expose (e.g. `seven_day_opus`)
+are omitted. Diagnostics go to stderr; stdout is always pure JSON.
+
+Tip: symlink it onto your PATH — `ln -s /Applications/ClaudeUsage.app/Contents/MacOS/ClaudeUsage /usr/local/bin/claude-usage`.
+(Keychain access only matters on the cache-miss path, and the symlink resolves
+to the signed binary, so there are no extra keychain prompts.)
+
 ## Build
 
 Requires macOS 14+ and Xcode 15 / Swift 5.9+.

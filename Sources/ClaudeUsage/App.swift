@@ -11,6 +11,12 @@ struct ClaudeUsageMain {
         // so the very first request looks like a returning visitor.
         CookieJar.restore()
 
+        // Headless mode: `ClaudeUsage --json` prints a usage snapshot for
+        // other programs and exits without ever starting NSApplication.
+        if let options = CLI.parse(CommandLine.arguments) {
+            CLI.runAndExit(options)
+        }
+
         let app = NSApplication.shared
         app.delegate = appDelegate
         app.setActivationPolicy(.accessory)
