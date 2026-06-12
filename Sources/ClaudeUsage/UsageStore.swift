@@ -24,6 +24,13 @@ final class UsageStore: ObservableObject {
     /// When the next automatic refresh will fire. Surfaced in the popover so
     /// users don't compulsively click Refresh and rate-limit themselves.
     @Published private(set) var nextRefreshAt: Date?
+    /// Menubar style: true = solid color block with contrasting text (the
+    /// "inverted" look), false = the classic colored-text-on-clear style.
+    /// Persisted; AppDelegate repaints via objectWillChange on change.
+    @Published var invertMenubarColors: Bool = UserDefaults.standard.object(forKey: UsageStore.invertMenubarColorsKey) as? Bool ?? true {
+        didSet { UserDefaults.standard.set(invertMenubarColors, forKey: UsageStore.invertMenubarColorsKey) }
+    }
+    private static let invertMenubarColorsKey = "invertMenubarColors"
 
     private var timer: Timer?
     /// Last time we proactively refreshed the OAuth token in response to a
@@ -223,7 +230,8 @@ final class UsageStore: ObservableObject {
     /// `filled` requests a solid color block (the gradient color as background,
     /// drawn black-on-color) instead of colored-on-clear text — far more legible
     /// in the menu bar than a thin colored glyph. Only the active percent states
-    /// (>0%) fill; the `0%`/emoji/error states stay plain so they blend in.
+    /// (>0%) fill — and only when `invertMenubarColors` is on; the
+    /// `0%`/emoji/error states stay plain so they blend in.
     var menubarLabel: (text: String, color: NSColor, filled: Bool) {
         // An active (not-yet-reset) window: show its percentage, treating a
         // missing utilization as 0% used.
@@ -232,7 +240,7 @@ final class UsageStore: ObservableObject {
             let used = max(0, min(100, window.utilization ?? 0))
             let rounded = Int(used.rounded())
             if rounded == 0 { return ("0%", .labelColor, false) }
-            return ("\(rounded)%", UsageColor.nsColor(forUsed: used), true)
+            return ("\(rounded)%", UsageColor.nsColor(forUsed: used), invertMenubarColors)
         }
         // No fresh data. Distinguish the various "no data" states so the user
         // knows whether to click and act.
