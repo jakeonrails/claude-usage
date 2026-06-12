@@ -259,11 +259,71 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let button = statusItem.button else { return }
         let label = store.menubarLabel
         let baseFont = NSFont.menuBarFont(ofSize: 0)
+        let font = NSFont.systemFont(ofSize: baseFont.pointSize, weight: .heavy)
 
-        let attrs: [NSAttributedString.Key: Any] = [
-            .foregroundColor: label.color,
-            .font: NSFont.systemFont(ofSize: baseFont.pointSize, weight: .heavy),
-        ]
-        button.attributedTitle = NSAttributedString(string: label.text, attributes: attrs)
+        if label.filled {
+            // Solid color block, black text. Drawn as a (non-template) image so
+            // we get a filled background the menubar can't give an attributed
+            // title. The dynamic fill resolves per-appearance at draw time.
+            button.image = Self.filledLabelImage(text: label.text, fill: label.color, font: font)
+            button.imagePosition = .imageOnly
+            button.attributedTitle = NSAttributedString(string: "")
+        } else {
+            button.image = nil
+            button.imagePosition = .noImage
+            let attrs: [NSAttributedString.Key: Any] = [
+                .foregroundColor: label.color,
+                .font: font,
+            ]
+            button.attributedTitle = NSAttributedString(string: label.text, attributes: attrs)
+        }
+    }
+
+    /// A solid rounded color block with black, centered text — the menubar
+    /// "pill". Sized to the text plus small padding; redrawn on demand so the
+    /// dynamic `fill` re-resolves when the system appearance changes.
+    private static func filledLabelImage(text: String, fill: NSColor, font: NSFont) -> NSImage {
+        let padX: CGFloat = 5
+        let padY: CGFloat = 1.5
+        let radius: CGFloat = 3.5
+
+        let measureAttrs: [NSAttributedString.Key: Any] = [.font: font]
+        let textSize = (text as NSString).size(withAttributes: measureAttrs)
+        let width = ceil(textSize.width + padX * 2)
+        let height = ceil(textSize.height + padY * 2)
+
+        let image = NSImage(size: NSSize(width: width, height: height), flipped: false) { rect in
+            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).setClip()
+            fill.setFill()
+            rect.fill()
+
+            // Black reads best on the green/amber/orange stops, but goes muddy
+            // on the red/dark-red end — switch to white once the block is dark.
+            let textColor = Self.contrastingText(on: fill)
+
+            let para = NSMutableParagraphStyle()
+            para.alignment = .center
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: font,
+                .foregroundColor: textColor,
+                .paragraphStyle: para,
+            ]
+            let ts = (text as NSString).size(withAttributes: attrs)
+            let textRect = NSRect(x: 0, y: (rect.height - ts.height) / 2, width: rect.width, height: ts.height)
+            (text as NSString).draw(in: textRect, withAttributes: attrs)
+            return true
+        }
+        image.isTemplate = false   // keep our colors; don't let the bar tint it
+        return image
+    }
+
+    /// Black or white, whichever has more contrast against `fill`. Resolved
+    /// against the current drawing appearance (the fill is a dynamic color) and
+    /// keyed off perceived luminance, so the red/dark-red end gets white text.
+    private static func contrastingText(on fill: NSColor) -> NSColor {
+        guard let rgb = fill.usingColorSpace(.sRGB) else { return .black }
+        // Rec. 601 luma — cheap and good enough for a "is this dark?" test.
+        let luma = 0.299 * rgb.redComponent + 0.587 * rgb.greenComponent + 0.114 * rgb.blueComponent
+        return luma < 0.55 ? .white : .black
     }
 }

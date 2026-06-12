@@ -220,28 +220,32 @@ final class UsageStore: ObservableObject {
     /// than `…`. Color: `0%` uses the system label color so it blends with the
     /// rest of the menu bar; above 0% it's the `UsageColor`
     /// green→yellow→orange→red→dark-red gradient.
-    var menubarLabel: (text: String, color: NSColor) {
+    /// `filled` requests a solid color block (the gradient color as background,
+    /// drawn black-on-color) instead of colored-on-clear text — far more legible
+    /// in the menu bar than a thin colored glyph. Only the active percent states
+    /// (>0%) fill; the `0%`/emoji/error states stay plain so they blend in.
+    var menubarLabel: (text: String, color: NSColor, filled: Bool) {
         // An active (not-yet-reset) window: show its percentage, treating a
         // missing utilization as 0% used.
         if let window = fiveHour,
            let resets = UsageFormat.parseResetsAt(window.resets_at), resets > Date() {
             let used = max(0, min(100, window.utilization ?? 0))
             let rounded = Int(used.rounded())
-            let color = rounded == 0 ? NSColor.labelColor : UsageColor.nsColor(forUsed: used)
-            return ("\(rounded)%", color)
+            if rounded == 0 { return ("0%", .labelColor, false) }
+            return ("\(rounded)%", UsageColor.nsColor(forUsed: used), true)
         }
         // No fresh data. Distinguish the various "no data" states so the user
         // knows whether to click and act.
-        if needsConnection { return ("🔗", .secondaryLabelColor) }
+        if needsConnection { return ("🔗", .secondaryLabelColor, false) }
         // Between sessions: the API answered successfully but the previous
         // 5-hour window has reset and no new one has started. True usage right
         // now is 0% — reserve "…" for genuinely missing data.
         if lastSuccess != nil {
-            return ("0%", .labelColor)
+            return ("0%", .labelColor, false)
         }
-        if let until = rateLimitedUntil, until > Date() { return ("⏳", .secondaryLabelColor) }
-        if case .error = state { return ("!", .systemRed) }
-        return ("…", .secondaryLabelColor)
+        if let until = rateLimitedUntil, until > Date() { return ("⏳", .secondaryLabelColor, false) }
+        if case .error = state { return ("!", .systemRed, false) }
+        return ("…", .secondaryLabelColor, false)
     }
 }
 
