@@ -17,6 +17,15 @@ struct ClaudeUsageMain {
             CLI.runAndExit(options)
         }
 
+        // Only one menubar GUI at a time. If another instance already holds the
+        // lock (e.g. the LaunchAgent copy is up and something launched a second
+        // one), bow out cleanly instead of stacking a duplicate status item.
+        guard SingleInstance.acquire() else {
+            FileHandle.standardError.write(
+                Data("ClaudeUsage: another instance is already running; exiting.\n".utf8))
+            exit(0)
+        }
+
         let app = NSApplication.shared
         app.delegate = appDelegate
         app.setActivationPolicy(.accessory)
