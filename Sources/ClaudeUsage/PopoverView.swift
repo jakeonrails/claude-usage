@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PopoverView: View {
     @ObservedObject var store: UsageStore
+    @ObservedObject var updateChecker: UpdateChecker
     @State private var now: Date = Date()
 
     private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -208,6 +209,10 @@ struct PopoverView: View {
             }
             HStack {
                 Spacer()
+                if let update = updateChecker.available {
+                    updateButton(update)
+                        .controlSize(.small)
+                }
                 refreshButton
                     .controlSize(.small)
                 Menu {
@@ -237,10 +242,54 @@ struct PopoverView: View {
         }()
         // `force: true` bypasses both the rate-limit gate and the
         // refresh-on-429 cooldown so manual clicks can always reset the
-        // per-token budget on demand.
-        return Button("Refresh") { Task { await store.refresh(force: true) } }
-            .disabled(isLoading)
-            .help(tip)
+        // per-token budget on demand. The same click also re-runs the GitHub
+        // update check (separate Task so it doesn't wait on the usage fetch),
+        // so you can trigger an update probe on demand right after pushing.
+        return Button("Refresh") {
+            Task { await store.refresh(force: true) }
+            Task { await updateChecker.check() }
+        }
+        .disabled(isLoading)
+        .help(tip)
+    }
+
+    /// Only shown when GitHub reports `main` is ahead of this build. Clicking it
+    /// pops a dialog with the update one-liner (alert-only — we never run git or
+    /// touch the user's checkout for them).
+    private func updateButton(_ update: UpdateChecker.Available) -> some View {
+        let commits = "\(update.aheadBy) commit\(update.aheadBy == 1 ? "" : "s")"
+        return Button {
+            showUpdateInstructions(aheadBy: update.aheadBy)
+        } label: {
+            Image(systemName: "arrow.down.circle.fill")
+                .foregroundStyle(.blue)
+        }
+        .buttonStyle(.borderless)
+        .help("Update available — you're \(commits) behind. Click for update instructions.")
+    }
+
+    private func showUpdateInstructions(aheadBy: Int) {
+        let commits = "\(aheadBy) commit\(aheadBy == 1 ? "" : "s")"
+        let cmd = UpdateChecker.updateCommand
+        let alert = NSAlert()
+        alert.messageText = "Update available"
+        alert.informativeText = """
+            A newer version of Claude Usage is available (you're \(commits) behind main).
+
+            There are no prebuilt downloads — each install is built and signed locally. To update, open your local claude-usage checkout (the folder you cloned and built from) in Terminal and run:
+
+            \(cmd)
+
+            That pulls the latest source, rebuilds, and reinstalls the app.
+            """
+        alert.addButton(withTitle: "Copy Command")
+        alert.addButton(withTitle: "Close")
+        // Accessory apps aren't active, so the modal would open unfocused/behind.
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertFirstButtonReturn {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(cmd, forType: .string)
+        }
     }
 
     // MARK: Derived
