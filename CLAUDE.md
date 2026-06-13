@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-`ClaudeUsage` is a single-target Swift Package macOS menubar app (`Package.swift`, `Sources/ClaudeUsage/`). It runs its **own** OAuth login against Claude, stores the tokens in its own Keychain item (`ClaudeUsage-credentials`), calls `https://api.anthropic.com/api/oauth/usage`, and renders the percentage used in the 5-hour session window in the menubar (color-coded). It deliberately does **not** read Claude Code's `Claude Code-credentials` item — owning its own tokens lets it rotate them on a 429 (the usage endpoint is rate-limited per access token) without racing the `claude` CLI's refresh. There is no test target — `swift test` is a no-op.
+`ClaudeUsage` is a single-target Swift Package macOS menubar app (`Package.swift`, `Sources/ClaudeUsage/`). It runs its **own** OAuth login against Claude, stores the tokens in its own Keychain item (`ClaudeUsage-credentials`), calls `https://api.anthropic.com/api/oauth/usage`, and renders the percentage used in the 5-hour session window in the menubar (color-coded). It deliberately does **not** read Claude Code's `Claude Code-credentials` item — owning its own tokens lets it rotate them on a 429 (the usage endpoint is rate-limited per access token) without racing the `claude` CLI's refresh. The `ClaudeUsageTests` target holds the unit + integration suite (`swift test`); see **Testing** below.
 
 ## Common commands
 
@@ -13,6 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ./install.sh            # build (unless SKIP_BUILD=1), bootout LaunchAgent, replace /Applications/ClaudeUsage.app, restart
 swift run               # dev loop — runs unsigned binary; menubar still works but you'll re-prompt for keychain access on every launch
 swift build -c release  # compile only
+swift test              # run the unit + integration suite (ClaudeUsageTests)
 SIGN_IDENTITY="My Cert" ./build-app.sh   # override the default "ClaudeUsage Self-Signed" identity
 SKIP_BUILD=1 ./install.sh                # reinstall an already-built bundle
 ```
@@ -39,6 +40,17 @@ Auth + fetch path:
 
 UI rendering: `UsageColor.swift` interpolates HSL across a multi-stop gradient keyed to utilization — green (0%) → yellow (50%) → orange (70%) → red (90%) → dark red (100%). `UsageGauge.swift` is a `Canvas` bar with an optional "you are here" tick at the time-elapsed fraction — fill past the tick = burning quota faster than the clock.
 
+## Testing
+
+`swift test` runs the `ClaudeUsageTests` target (`Tests/ClaudeUsageTests/`), which `@testable import ClaudeUsage` — the executable target is testable directly, no library split. The suite is unit + integration coverage of the **pure logic**: color/HSL interpolation (`ColorAndPaceTests`), weekly pacing (`Pace`), duration/percent/ISO8601 formatting and contrast (`FormatTests`), PKCE + credential expiry (`AuthTests`), `freshUtilization`/user-agent/rate-limit math (`NetworkLogicTests`), the `--json` CLI report pipeline (`CLIIntegrationTests`), `UsageResponse`/cache Codable round-trips (`CacheCodableTests`), and the alert-only update check's decision logic (`UpdateCheckerTests`). Tests are deterministic and headless: inject a fixed `now`, never touch the network or keychain, and leave no side effects on the real machine (the cache/UserDefaults tests back up and restore real state). They deliberately do **not** cover GUI rendering (`AppDelegate` panel, `PopoverView`), live network, or Keychain `SecItem` calls — those are integration-tested by running the app.
+
+**When to run tests** — not after every keystroke, but:
+- **During feature development**, as you build out logic, to catch regressions early.
+- **After** finishing a feature or fix.
+- **Always before `git push` or opening a PR.**
+
+A committed **`pre-push` git hook** (`.githooks/pre-push`, activated by `git config core.hooksPath .githooks` — `bin/conductor-setup` does this automatically per workspace) enforces the last rule: it runs `swift test` and **blocks the push if anything fails**. In a genuine emergency you can bypass it with `git push --no-verify`, but the default is that red tests never reach the remote. If you add logic worth protecting, add a test for it in the same change.
+
 ## Code signing — load-bearing for keychain ACLs
 
 `build-app.sh` signs with a stable self-signed identity (default `ClaudeUsage Self-Signed`, overridable via `SIGN_IDENTITY`). **Ad-hoc signing is rejected** by both `build-app.sh` and `install.sh` — every ad-hoc rebuild produces a different cdhash, which appends a stale ACL entry to the `ClaudeUsage-credentials` keychain item and re-prompts the user (and can force a reconnect). The script greps `codesign -dvvv` for `Signature=adhoc` and bails if found.
@@ -55,4 +67,5 @@ To create the cert: Keychain Access → Certificate Assistant → Create a Certi
 - The 5-hour and weekly limits are **server-enforced by Anthropic**; we display the `utilization` percentage the API returns. Do not try to compute windows from local JSONL.
 - If `AppCredentials.load()` returns nil (never connected, or the item was cleared), `UsageStore.needsConnection` flips true and the popover shows `ConnectAccountView` instead of erroring. Other keychain failures surface in the footer — don't crash.
 - `UsageResponse` decodes `seven_day_opus` / `seven_day_sonnet` optionally because not all plans expose them; the popover hides those sections when `utilization == nil`.
+- **Keep `FEATURE_MAP.md` in sync as you add, change, or remove features.** It's the human-readable map of what the app does (feature areas, key types, the launch→auth→fetch→render flow, and unit-test targets). When a change adds a feature, alters an existing one's behavior, or drops one, update the matching entry — and the key-types table / test-target list if those shifted — in the same change. A stale feature map is worse than none.
 - **Before pushing any change that affects the UI, recapture screenshots and update `README.md`.** The popover renders differently per macOS version (window styling differs on Tahoe 26+ vs Sonoma 14 / Sequoia 15), so the README keeps a set per OS family in `docs/` (`Light.png`/`Dark.png` = Tahoe+, `Light-Sonoma.png`/`Dark-Sonoma.png` = Sonoma/Sequoia). Use `scripts/screenshot-menu.sh` to capture the activated menu (it hides other windows, opens the popover, and grabs it; needs Accessibility + Screen Recording permission for the terminal/app running it). You can only capture the OS family you're running on, so a single machine usually can't refresh both sets — the `Light.png`/`Dark.png` Tahoe pair currently lags the Sonoma pair (captured pre–menubar-color-block) and needs a Tahoe machine to recapture. If you make a graphical change on Tahoe, recapture the Tahoe pair and update the README parenthetical noting they're current; likewise refresh the Sonoma pair from a Sonoma/Sequoia machine. Whichever set you can't capture, leave a parenthetical near that image in `README.md` saying it's stale and which OS is needed.

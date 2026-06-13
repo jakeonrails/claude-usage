@@ -24,11 +24,23 @@ final class UpdateChecker: ObservableObject {
     /// The commit the running app was built from, baked into Info.plist by
     /// build-app.sh. Nil/empty for `swift run` and non-git builds — in that case
     /// we skip checking entirely so dev builds never show a false "update".
-    private let buildCommit: String? = {
-        let raw = Bundle.main.object(forInfoDictionaryKey: "GitCommit") as? String
+    private let buildCommit: String? =
+        UpdateChecker.normalizedCommit(Bundle.main.object(forInfoDictionaryKey: "GitCommit") as? String)
+
+    /// Trim a baked-in `GitCommit` value and treat empty as nil, so `swift run`
+    /// / non-git builds (which leave it blank) disable the check entirely.
+    static func normalizedCommit(_ raw: String?) -> String? {
         let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines)
         return (trimmed?.isEmpty == false) ? trimmed : nil
-    }()
+    }
+
+    /// Pure decision: GitHub's compare `status` + `ahead_by` → our alert state.
+    /// Only "ahead" with a positive count means main has newer commits AND our
+    /// build is a clean ancestor — so a feature-branch build ("diverged"/"behind")
+    /// never trips the alert.
+    static func evaluate(status: String, aheadBy: Int) -> Available? {
+        (status == "ahead" && aheadBy > 0) ? Available(aheadBy: aheadBy) : nil
+    }
 
     init() {
         // No baked commit → nothing to compare against. Stay silent.
@@ -42,7 +54,7 @@ final class UpdateChecker: ObservableObject {
     /// The one-liner the user runs in their local checkout to update.
     static let updateCommand = "git pull --ff-only && ./install.sh"
 
-    private struct CompareResult: Decodable {
+    struct CompareResult: Decodable {
         /// "ahead" | "behind" | "identical" | "diverged" — main relative to our build.
         let status: String
         let ahead_by: Int
@@ -67,11 +79,7 @@ final class UpdateChecker: ObservableObject {
             guard let http = response as? HTTPURLResponse,
                   (200..<300).contains(http.statusCode) else { return }
             let result = try JSONDecoder().decode(CompareResult.self, from: data)
-            if result.status == "ahead", result.ahead_by > 0 {
-                available = Available(aheadBy: result.ahead_by)
-            } else {
-                available = nil
-            }
+            available = Self.evaluate(status: result.status, aheadBy: result.ahead_by)
         } catch {
             // Transient network/decode error — keep the last known state and
             // try again on the next tick rather than flickering the button.
