@@ -10,6 +10,12 @@ APP_DIR="${APP_NAME}.app"
 
 cd "$(dirname "$0")"
 
+# Commit this build was produced from. Baked into Info.plist (GitCommit) so the
+# running app can ask GitHub whether jakeonrails/claude-usage/main has moved
+# ahead of it (the in-app "update available" check). Empty for non-git builds —
+# UpdateChecker treats an empty value as "dev build, don't check".
+GIT_COMMIT="$(git rev-parse HEAD 2>/dev/null || true)"
+
 # Load SIGN_IDENTITY (and any other secrets) from .env if present. Kept out
 # of git because the cert identity string contains a personal email + Team ID.
 if [[ -f .env ]]; then
@@ -51,6 +57,8 @@ cat >"${APP_DIR}/Contents/Info.plist" <<PLIST
   <string>0.1.0</string>
   <key>CFBundleVersion</key>
   <string>1</string>
+  <key>GitCommit</key>
+  <string>${GIT_COMMIT}</string>
   <key>LSMinimumSystemVersion</key>
   <string>13.0</string>
   <key>LSUIElement</key>

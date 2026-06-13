@@ -11,6 +11,7 @@ private final class PopoverPanel: NSPanel {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let store = UsageStore()
+    private let updateChecker = UpdateChecker()
     private var statusItem: NSStatusItem!
     private var panel: PopoverPanel!
     private var hostingController: NSHostingController<PopoverView>!
@@ -61,7 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: Panel construction
 
     private func buildPanel() {
-        hostingController = NSHostingController(rootView: PopoverView(store: store))
+        hostingController = NSHostingController(rootView: PopoverView(store: store, updateChecker: updateChecker))
         // Report the SwiftUI ideal size as preferredContentSize so we can size
         // the panel to the content (and resize-follow when it changes).
         hostingController.sizingOptions = [.preferredContentSize]

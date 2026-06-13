@@ -250,6 +250,27 @@ The LaunchAgent shows up in **System Settings → General → Login Items →
 Allow in the Background** (toggleable from the UI if you want to disable
 it temporarily).
 
+## Updating
+
+There are no prebuilt binaries to download — every install is built and signed
+locally against your own cert (that's what keeps the Keychain ACL stable). So
+updating means pulling the latest source and rebuilding:
+
+```bash
+git pull --ff-only && ./install.sh
+```
+
+Run that from your local `claude-usage` checkout (the folder you cloned and
+built from). It pulls the newest commit on `main`, rebuilds, and reinstalls.
+
+The app tells you when an update is waiting: `build-app.sh` bakes the build's
+commit into the bundle, and the app checks `jakeonrails/claude-usage`'s `main`
+every 5 minutes. When `main` is ahead, a blue **update** button (↓) appears next
+to *Refresh* in the popover — click it for a dialog with the one-liner above and
+a **Copy Command** button. It's alert-only: the app never runs git or touches
+your checkout, so it doesn't care where you keep the repo. (Dev builds from a
+feature branch don't trigger it — only a clean `main` ancestor does.)
+
 ## Uninstall
 
 ```bash
