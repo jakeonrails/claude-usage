@@ -11,3 +11,7 @@ if [ -n "${CONDUCTOR_ROOT_PATH:-}" ] && [ -f "$CONDUCTOR_ROOT_PATH/.env" ]; then
 else
   echo "WARNING: no .env found at \$CONDUCTOR_ROOT_PATH — code signing will fall back to ad-hoc" >&2
 fi
+
+# Activate the version-controlled git hooks (pre-push runs `swift test` before any push).
+git config core.hooksPath .githooks
+echo "==> activated .githooks (pre-push test gate)"
