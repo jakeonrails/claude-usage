@@ -23,6 +23,11 @@ enum OAuth {
 
     enum RefreshError: Error, LocalizedError {
         case http(Int, String)
+        /// OAuth 2.0 RFC 6749 §5.2 terminal error: the refresh token is
+        /// permanently dead (revoked, expired beyond reuse, or never issued).
+        /// Distinct from `.http(400, ...)` so callers can recover by wiping
+        /// credentials and prompting re-auth, instead of looping on retries.
+        case invalidGrant(String)
         case transport(Error)
         case decode(Error)
 
@@ -30,10 +35,26 @@ enum OAuth {
             switch self {
             case .http(let code, let body):
                 return "Token refresh HTTP \(code): \(body.prefix(200))"
+            case .invalidGrant(let body):
+                return "Refresh token invalid or revoked: \(body.prefix(200))"
             case .transport(let e): return "Token refresh transport error: \(e.localizedDescription)"
             case .decode(let e): return "Token refresh decode error: \(e.localizedDescription)"
             }
         }
+    }
+
+    /// Pure helper: does this response body indicate the OAuth 2.0
+    /// `invalid_grant` terminal error? Only `invalid_grant` means the refresh
+    /// token is permanently dead — `invalid_request`, `invalid_client`, etc.
+    /// are configuration issues, not "wipe and re-auth" signals.
+    static func isInvalidGrantBody(_ body: String) -> Bool {
+        guard let data = body.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data, options: []),
+              let dict = json as? [String: Any],
+              let err = dict["error"] as? String else {
+            return false
+        }
+        return err == "invalid_grant"
     }
 
     /// Refresh the token pair and persist the rotated credentials to our
@@ -83,7 +104,11 @@ enum OAuth {
             throw RefreshError.http(-1, "no http response")
         }
         guard (200..<300).contains(http.statusCode) else {
-            throw RefreshError.http(http.statusCode, String(data: data, encoding: .utf8) ?? "")
+            let body = String(data: data, encoding: .utf8) ?? ""
+            if http.statusCode == 400, isInvalidGrantBody(body) {
+                throw RefreshError.invalidGrant(body)
+            }
+            throw RefreshError.http(http.statusCode, body)
         }
         CookieJar.captureFromSharedStorage()
         do {

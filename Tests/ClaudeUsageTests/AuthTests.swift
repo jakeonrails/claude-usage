@@ -290,4 +290,60 @@ final class AuthTests: XCTestCase {
         XCTAssertEqual(String(parts[0]), "MYCODE")
         XCTAssertEqual(String(parts[1]), "MYSTATE")
     }
+
+    // MARK: - OAuth.isInvalidGrantBody (auto-disconnect trigger)
+    //
+    // Gates the "wipe credentials and prompt re-auth" branch in UsageStore.
+    // True only for OAuth 2.0 RFC 6749 §5.2 `invalid_grant` — other errors
+    // (`invalid_request`, `invalid_client`) are config issues and must stay
+    // visible as errors instead of silently logging the user out.
+
+    func testIsInvalidGrantBodyTrueForCanonicalPayload() {
+        let body = #"{"error": "invalid_grant", "error_description": "Refresh token not found or invalid"}"#
+        XCTAssertTrue(OAuth.isInvalidGrantBody(body))
+    }
+
+    func testIsInvalidGrantBodyTrueWithExtraKeys() {
+        let body = #"{"error":"invalid_grant","error_description":"revoked","trace_id":"abc-123"}"#
+        XCTAssertTrue(OAuth.isInvalidGrantBody(body))
+    }
+
+    func testIsInvalidGrantBodyFalseForOtherOAuthErrors() {
+        XCTAssertFalse(OAuth.isInvalidGrantBody(#"{"error":"invalid_request"}"#))
+        XCTAssertFalse(OAuth.isInvalidGrantBody(#"{"error":"invalid_client"}"#))
+        XCTAssertFalse(OAuth.isInvalidGrantBody(#"{"error":"unauthorized_client"}"#))
+        XCTAssertFalse(OAuth.isInvalidGrantBody(#"{"error":"unsupported_grant_type"}"#))
+    }
+
+    func testIsInvalidGrantBodyFalseForMalformedJSON() {
+        XCTAssertFalse(OAuth.isInvalidGrantBody(""))
+        XCTAssertFalse(OAuth.isInvalidGrantBody("not json"))
+        XCTAssertFalse(OAuth.isInvalidGrantBody("<html>500 internal server error</html>"))
+    }
+
+    func testIsInvalidGrantBodyFalseWhenErrorKeyMissing() {
+        XCTAssertFalse(OAuth.isInvalidGrantBody(#"{"message":"invalid_grant"}"#))
+        XCTAssertFalse(OAuth.isInvalidGrantBody("{}"))
+    }
+
+    func testIsInvalidGrantBodyFalseWhenErrorIsNotString() {
+        XCTAssertFalse(OAuth.isInvalidGrantBody(#"{"error": 400}"#))
+        XCTAssertFalse(OAuth.isInvalidGrantBody(#"{"error": null}"#))
+    }
+
+    func testIsInvalidGrantBodyCaseSensitive() {
+        // OAuth 2.0 §5.2 defines the codes as lowercase tokens. Don't loosen
+        // matching — a real `invalid_grant` is always lowercase.
+        XCTAssertFalse(OAuth.isInvalidGrantBody(#"{"error":"Invalid_Grant"}"#))
+        XCTAssertFalse(OAuth.isInvalidGrantBody(#"{"error":"INVALID_GRANT"}"#))
+    }
+
+    func testRefreshErrorInvalidGrantLocalizedDescription() {
+        let err = OAuth.RefreshError.invalidGrant(#"{"error":"invalid_grant"}"#)
+        let desc = err.errorDescription ?? ""
+        // The description must read as "revoked / re-auth needed" rather than
+        // a generic HTTP error so the message in /tmp/claudeusage.err.log
+        // explains why credentials were wiped.
+        XCTAssertTrue(desc.lowercased().contains("invalid") || desc.lowercased().contains("revoked"))
+    }
 }

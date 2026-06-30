@@ -21,6 +21,11 @@ final class UsageStore: ObservableObject {
     /// True when our own Keychain item is empty — the popover should show
     /// ConnectAccountView instead of usage data.
     @Published private(set) var needsConnection: Bool = true
+    /// One-line explanation rendered above ConnectAccountView when we kicked
+    /// the user back to the connect screen automatically (e.g. the refresh
+    /// token was revoked server-side). Cleared on manual disconnect or after
+    /// a successful reconnect, so it never lingers stale.
+    @Published private(set) var reconnectReason: String?
     /// When the next automatic refresh will fire. Surfaced in the popover so
     /// users don't compulsively click Refresh and rate-limit themselves.
     @Published private(set) var nextRefreshAt: Date?
@@ -116,9 +121,26 @@ final class UsageStore: ObservableObject {
             } else {
                 state = .idle
             }
+        } catch OAuth.RefreshError.invalidGrant(let body) {
+            // Refresh token is dead server-side (e.g. user logged out of the
+            // Claude CLI, which revokes all refresh tokens for this client_id).
+            // Retrying the same token will fail forever — wipe credentials and
+            // route the user to ConnectAccountView with an explanation.
+            FileHandle.standardError.write(Data(
+                "[ClaudeUsage] refresh token rejected (invalid_grant) — auto-disconnecting: \(body.prefix(200))\n".utf8
+            ))
+            autoDisconnect(reason: "Your previous session expired. Please reconnect.")
         } catch {
             state = .error(error.localizedDescription, Date())
         }
+    }
+
+    /// Internal counterpart to `disconnect()` used when the app decides for
+    /// itself that credentials must be cleared (rather than the user clicking
+    /// Disconnect). Sets `reconnectReason` so ConnectAccountView can explain.
+    private func autoDisconnect(reason: String) {
+        disconnect()
+        reconnectReason = reason
     }
 
     /// Reads creds, fetches usage. On 401, refresh and retry once. On 429,
@@ -161,6 +183,7 @@ final class UsageStore: ObservableObject {
     func onConnected() async {
         needsConnection = false
         rateLimitedUntil = nil
+        reconnectReason = nil
         await refresh(force: true)
     }
 
@@ -172,6 +195,7 @@ final class UsageStore: ObservableObject {
         lastSuccess = nil
         rateLimitedUntil = nil
         lastRateLimit = nil
+        reconnectReason = nil
     }
 
     // The window we display in the menubar.

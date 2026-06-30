@@ -20,6 +20,16 @@ struct ConnectAccountView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
+            if let reason = store.reconnectReason {
+                Text(reason)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.orange.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+
             Divider()
 
             VStack(alignment: .leading, spacing: 6) {
