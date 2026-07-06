@@ -5,7 +5,28 @@ import SwiftUI
 /// Borderless panel that can still become key, so the SwiftUI controls inside
 /// (Refresh / Quit) receive clicks without activating the (accessory) app.
 private final class PopoverPanel: NSPanel {
+    /// Invoked on Escape (or Cmd+.) — a borderless panel has no close button,
+    /// so this is the keyboard dismissal path. Set by AppDelegate to closePanel().
+    var onCancel: (() -> Void)?
+
     override var canBecomeKey: Bool { true }
+
+    // Esc reaches the window as cancelOperation(_:) via the responder chain
+    // when no view inside claims it.
+    override func cancelOperation(_ sender: Any?) {
+        onCancel?()
+    }
+
+    // Fallback: if a responder swallows the cancel selector but lets the raw
+    // key event bubble, still treat Esc (keyCode 53) as dismiss instead of
+    // letting NSWindow beep on the unhandled key.
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 {
+            onCancel?()
+            return
+        }
+        super.keyDown(with: event)
+    }
 }
 
 @MainActor
@@ -136,6 +157,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // visible on and re-shows it there after orderOut, which puts the
         // popover off-screen when invoked from any non-primary Space.
         panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary, .stationary]
+        panel.onCancel = { [weak self] in self?.closePanel() }
     }
 
     /// A resizable rounded-rect mask: the center stretches and the corners stay
