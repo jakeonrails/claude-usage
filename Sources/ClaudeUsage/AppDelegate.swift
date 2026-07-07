@@ -54,6 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.target = self
         statusItem.button?.action = #selector(togglePanel(_:))
+        statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
 
         buildPanel()
 
@@ -177,11 +178,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: Show / hide
 
     @objc private func togglePanel(_ sender: Any?) {
+        if NSApp.currentEvent?.type == .rightMouseUp {
+            showContextMenu()
+            return
+        }
         if panel.isVisible {
             closePanel()
         } else {
             showPanel()
         }
+    }
+
+    // MARK: Right-click context menu
+
+    /// Right-click on the status item: a native NSMenu (so it picks up the
+    /// system light/dark appearance automatically) with the same invert-colors
+    /// toggle and Quit that live in the popover's overflow menu. Assigned to
+    /// `statusItem.menu` only for the duration of the click — a permanently
+    /// assigned menu would hijack left-clicks too — and detached in
+    /// `menuDidClose` so the next left-click toggles the panel again.
+    private func showContextMenu() {
+        closePanel()
+
+        let menu = NSMenu()
+        let invert = NSMenuItem(
+            title: "Invert Menu Bar Colors",
+            action: #selector(toggleInvertColors(_:)),
+            keyEquivalent: ""
+        )
+        invert.target = self
+        invert.state = store.invertMenubarColors ? .on : .off
+        menu.addItem(invert)
+        menu.addItem(.separator())
+        // A local selector (not NSApplication.terminate(_:)) and no key
+        // equivalent: macOS auto-decorates well-known selectors with a system
+        // icon, and a "q" equivalent renders a ⌘Q hint — we want neither.
+        let quit = NSMenuItem(
+            title: "Quit ClaudeUsage",
+            action: #selector(quitApp(_:)),
+            keyEquivalent: ""
+        )
+        quit.target = self
+        menu.addItem(quit)
+        menu.delegate = self
+
+        statusItem.menu = menu
+        statusItem.button?.performClick(nil)
+    }
+
+    @objc private func toggleInvertColors(_ sender: Any?) {
+        store.invertMenubarColors.toggle()
+    }
+
+    @objc private func quitApp(_ sender: Any?) {
+        NSApp.terminate(nil)
     }
 
     private func showPanel() {
@@ -348,5 +398,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Rec. 601 luma — cheap and good enough for a "is this dark?" test.
         let luma = 0.299 * rgb.redComponent + 0.587 * rgb.greenComponent + 0.114 * rgb.blueComponent
         return luma < 0.55 ? .white : .black
+    }
+}
+
+extension AppDelegate: NSMenuDelegate {
+    /// Detach the transient right-click menu so the next left-click goes back
+    /// to toggling the panel instead of re-opening the menu.
+    func menuDidClose(_ menu: NSMenu) {
+        statusItem.menu = nil
     }
 }
