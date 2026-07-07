@@ -59,7 +59,7 @@ extension ExtraUsage: Encodable {
 }
 extension UsageResponse: Encodable {
     enum CodingKeys: String, CodingKey {
-        case five_hour, seven_day, seven_day_opus, seven_day_sonnet, extra_usage
+        case five_hour, seven_day, seven_day_opus, seven_day_sonnet, extra_usage, limits
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -68,5 +68,6 @@ extension UsageResponse: Encodable {
         try c.encodeIfPresent(seven_day_opus, forKey: .seven_day_opus)
         try c.encodeIfPresent(seven_day_sonnet, forKey: .seven_day_sonnet)
         try c.encodeIfPresent(extra_usage, forKey: .extra_usage)
+        try c.encodeIfPresent(limits, forKey: .limits)
     }
 }

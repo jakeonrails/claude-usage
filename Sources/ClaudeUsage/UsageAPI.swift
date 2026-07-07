@@ -18,12 +18,46 @@ struct ExtraUsage: Decodable {
     let utilization: Double?
 }
 
+/// One entry of the response's `limits[]` array. The API surfaces per-model
+/// weekly limits here (`kind == "weekly_scoped"`, with `scope.model`), not via
+/// the older `seven_day_<model>` keys — those are now null. Codable so the
+/// cache can round-trip it; the synthesized encoder omits nil fields.
+struct UsageLimit: Codable {
+    let kind: String?
+    let group: String?
+    let percent: Double?
+    let resets_at: String?
+    let scope: Scope?
+
+    struct Scope: Codable {
+        let model: Model?
+
+        struct Model: Codable {
+            let id: String?
+            let display_name: String?
+        }
+    }
+}
+
 struct UsageResponse: Decodable {
     let five_hour: UsageWindow?
     let seven_day: UsageWindow?
     let seven_day_opus: UsageWindow?
     let seven_day_sonnet: UsageWindow?
     let extra_usage: ExtraUsage?
+    let limits: [UsageLimit]?
+
+    /// The weekly per-model limit for a given model display name (e.g.
+    /// "Fable"), surfaced as a `UsageWindow` so it renders through the same
+    /// path as the legacy `seven_day_*` windows. Sourced from `limits[]`, where
+    /// Anthropic moved scoped-model usage (the `seven_day_sonnet`/`_opus` keys
+    /// now come back null). Returns nil when no matching scoped limit is present.
+    func scopedWeeklyWindow(modelDisplayName: String) -> UsageWindow? {
+        guard let limit = limits?.first(where: {
+            $0.kind == "weekly_scoped" && $0.scope?.model?.display_name == modelDisplayName
+        }) else { return nil }
+        return UsageWindow(utilization: limit.percent, resets_at: limit.resets_at)
+    }
 }
 
 enum UsageAPIError: Error, LocalizedError {

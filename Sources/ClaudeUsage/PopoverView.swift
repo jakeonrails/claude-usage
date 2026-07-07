@@ -38,6 +38,10 @@ struct PopoverView: View {
                 Divider()
                 weeklyModelSection(title: "Weekly · Opus", window: opus)
             }
+            if let fable = store.sevenDayFable, fable.utilization != nil {
+                Divider()
+                weeklyModelSection(title: "Weekly · Fable", window: fable)
+            }
 
             Divider()
 
