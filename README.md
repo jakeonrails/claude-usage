@@ -68,7 +68,8 @@ On each refresh it then:
 
 1. Reads the OAuth token from `ClaudeUsage-credentials`.
 2. Calls `https://api.anthropic.com/api/oauth/usage` with that token.
-3. Parses `five_hour`, `seven_day`, `seven_day_opus`, `seven_day_sonnet`.
+3. Parses `five_hour`, `seven_day`, `seven_day_opus`, `seven_day_sonnet`, and
+   per-model scoped windows from `limits[]` (e.g. Fable).
 
 No separate Anthropic developer registration is needed — the OAuth flow reuses
 the same public `client_id` and hosted redirect the `claude` CLI itself uses.
@@ -99,6 +100,7 @@ elapsed/remaining per window — without doing their own OAuth:
   },
   "seven_day": { "...": "same shape" },
   "seven_day_sonnet": { "...": "same shape, present only on plans that report it" },
+  "seven_day_fable": { "...": "same shape, derived from the limits[] scoped-model entry" },
   "extra_usage": { "enabled": false }
 }
 ```

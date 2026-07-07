@@ -94,7 +94,8 @@ final class CLIWindowReportTests: XCTestCase {
             seven_day: nil,
             seven_day_opus: nil,
             seven_day_sonnet: nil,
-            extra_usage: nil
+            extra_usage: nil,
+            limits: nil
         )
         let r = CLI.report(usage, fetchedAt: fixedNow, source: "api", error: nil, now: fixedNow)
         XCTAssertNil(r.five_hour)
@@ -112,7 +113,8 @@ final class CLIWindowReportTests: XCTestCase {
             seven_day: nil,
             seven_day_opus: nil,
             seven_day_sonnet: nil,
-            extra_usage: nil
+            extra_usage: nil,
+            limits: nil
         )
         let r = CLI.report(usage, fetchedAt: fixedNow, source: "api", error: nil, now: fixedNow)
         let wr = try! XCTUnwrap(r.five_hour)
@@ -138,7 +140,8 @@ final class CLIWindowReportTests: XCTestCase {
             seven_day: nil,
             seven_day_opus: nil,
             seven_day_sonnet: nil,
-            extra_usage: nil
+            extra_usage: nil,
+            limits: nil
         )
         let r = CLI.report(usage, fetchedAt: fixedNow, source: "cache", error: nil, now: fixedNow)
         let wr = try! XCTUnwrap(r.five_hour)
@@ -159,7 +162,8 @@ final class CLIWindowReportTests: XCTestCase {
             seven_day: nil,
             seven_day_opus: nil,
             seven_day_sonnet: nil,
-            extra_usage: nil
+            extra_usage: nil,
+            limits: nil
         )
         let r = CLI.report(usage, fetchedAt: fixedNow, source: "api", error: nil, now: fixedNow)
         let wr = try! XCTUnwrap(r.five_hour)
@@ -177,7 +181,8 @@ final class CLIWindowReportTests: XCTestCase {
             seven_day: nil,
             seven_day_opus: window, // plans that don't expose this return it empty
             seven_day_sonnet: nil,
-            extra_usage: nil
+            extra_usage: nil,
+            limits: nil
         )
         let r = CLI.report(usage, fetchedAt: fixedNow, source: "api", error: nil, now: fixedNow)
         XCTAssertNil(r.seven_day_opus, "Empty (nil util + nil resets_at) window should be omitted")
@@ -267,7 +272,8 @@ final class CLIReportIntegrationTests: XCTestCase {
             seven_day: nil,
             seven_day_opus: nil,
             seven_day_sonnet: nil,
-            extra_usage: nil
+            extra_usage: nil,
+            limits: nil
         )
         let report = CLI.report(
             usage,
@@ -288,7 +294,8 @@ final class CLIReportIntegrationTests: XCTestCase {
             seven_day: nil,
             seven_day_opus: nil,
             seven_day_sonnet: nil,
-            extra_usage: nil
+            extra_usage: nil,
+            limits: nil
         )
         let report = CLI.report(
             usage,
@@ -308,7 +315,8 @@ final class CLIReportIntegrationTests: XCTestCase {
             seven_day: nil,
             seven_day_opus: nil,
             seven_day_sonnet: nil,
-            extra_usage: nil
+            extra_usage: nil,
+            limits: nil
         )
         let slightlyFuture = fixedNow.addingTimeInterval(5)
         let report = CLI.report(
@@ -373,7 +381,8 @@ final class CLIReportIntegrationTests: XCTestCase {
             seven_day: nil,
             seven_day_opus: nil,
             seven_day_sonnet: nil,
-            extra_usage: nil
+            extra_usage: nil,
+            limits: nil
         )
         let report = CLI.report(
             usage,

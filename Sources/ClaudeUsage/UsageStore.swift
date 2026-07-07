@@ -191,6 +191,12 @@ final class UsageStore: ObservableObject {
         lastSuccess?.response.seven_day_sonnet
     }
 
+    /// The weekly Fable window, derived from the response's `limits[]` scoped
+    /// entries (the API exposes Fable only there, not as a `seven_day_*` key).
+    var sevenDayFable: UsageWindow? {
+        lastSuccess?.response.scopedWeeklyWindow(modelDisplayName: "Fable")
+    }
+
     var lastUpdated: Date? {
         // The displayed numbers come from `lastSuccess`, so "Updated …" should
         // track the last successful fetch — not an error's timestamp.

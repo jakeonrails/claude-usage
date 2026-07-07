@@ -192,6 +192,7 @@ enum CLI {
         let seven_day: WindowReport?
         let seven_day_opus: WindowReport?
         let seven_day_sonnet: WindowReport?
+        let seven_day_fable: WindowReport?
         let extra_usage: ExtraUsageReport?
     }
 
@@ -218,6 +219,7 @@ enum CLI {
             seven_day: windowReport(usage.seven_day, duration: weeklyWindow, now: now),
             seven_day_opus: windowReport(usage.seven_day_opus, duration: weeklyWindow, now: now),
             seven_day_sonnet: windowReport(usage.seven_day_sonnet, duration: weeklyWindow, now: now),
+            seven_day_fable: windowReport(usage.scopedWeeklyWindow(modelDisplayName: "Fable"), duration: weeklyWindow, now: now),
             extra_usage: usage.extra_usage.map {
                 ExtraUsageReport(enabled: $0.is_enabled, used_percent: $0.utilization)
             }
