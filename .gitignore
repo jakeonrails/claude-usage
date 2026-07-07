@@ -6,3 +6,8 @@ DerivedData/
 ClaudeUsage.app/
 .DS_Store
 .env
+
+# Stray compiler outputs
+*.d
+*.o
+*.swiftdeps
