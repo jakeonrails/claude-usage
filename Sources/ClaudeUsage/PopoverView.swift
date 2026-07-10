@@ -350,13 +350,62 @@ struct PopoverView: View {
     }
 
     /// Clock-hour marks (12a, 1a, …, 11p) at each top-of-hour inside the
-    /// session window, so the tick sits on "7p" at 7pm.
+    /// session window, so the tick sits on "7p" at 7pm. The window's end is
+    /// always labeled at the right edge — it's the "when do I reset" instant —
+    /// snapped to the plain hour when the reset is near one (the API's reset
+    /// timestamps jitter sub-second around the hour, sometimes landing just
+    /// before it), minute-precise ("8:50p") otherwise. The start is labeled
+    /// too when it falls on a whole hour. Interior marks that would crowd an
+    /// edge label are dropped in its favor.
     static func hourMarks(resetsAt: String?, windowDuration: TimeInterval, calendar: Calendar = .current) -> [UsageGauge.GridMark]? {
-        calendarMarks(resetsAt: resetsAt, windowDuration: windowDuration, unit: .hour, calendar: calendar) { date in
-            let hour = calendar.component(.hour, from: date)
-            let suffix = hour < 12 ? "a" : "p"
-            let twelve = hour % 12 == 0 ? 12 : hour % 12
-            return "\(twelve)\(suffix)"
+        guard let resetDate = UsageFormat.parseResetsAt(resetsAt),
+              var marks = calendarMarks(resetsAt: resetsAt, windowDuration: windowDuration, unit: .hour, calendar: calendar, label: {
+                  hourLabel(hour: calendar.component(.hour, from: $0))
+              })
+        else { return nil }
+
+        // Fraction of the bar under which two labels visually collide.
+        let crowd = 0.06
+
+        marks.removeAll { $0.fraction > 1 - crowd }
+        let endLabel = snappedHourLabel(for: resetDate, calendar: calendar)
+            ?? minuteLabel(for: resetDate, calendar: calendar)
+        marks.append(UsageGauge.GridMark(fraction: 1, label: endLabel))
+
+        let windowStart = resetDate.addingTimeInterval(-windowDuration)
+        if let startLabel = snappedHourLabel(for: windowStart, calendar: calendar) {
+            marks.removeAll { $0.fraction < crowd }
+            marks.insert(UsageGauge.GridMark(fraction: 0, label: startLabel), at: 0)
         }
+        return marks
+    }
+
+    /// "7p"-style label for a clock hour (0–23).
+    private static func hourLabel(hour: Int) -> String {
+        let suffix = hour < 12 ? "a" : "p"
+        let twelve = hour % 12 == 0 ? 12 : hour % 12
+        return "\(twelve)\(suffix)"
+    }
+
+    /// Hour label when `date` is within `tolerance` of a whole hour (either
+    /// side, so jittered reset timestamps still read as the hour), else nil.
+    private static func snappedHourLabel(for date: Date, calendar: Calendar, tolerance: TimeInterval = 300) -> String? {
+        guard let hour = calendar.dateInterval(of: .hour, for: date) else { return nil }
+        if date.timeIntervalSince(hour.start) <= tolerance {
+            return hourLabel(hour: calendar.component(.hour, from: hour.start))
+        }
+        if hour.end.timeIntervalSince(date) <= tolerance {
+            return hourLabel(hour: calendar.component(.hour, from: hour.end))
+        }
+        return nil
+    }
+
+    /// "8:50p"-style minute-precise label for mid-hour instants.
+    private static func minuteLabel(for date: Date, calendar: Calendar) -> String {
+        let hour = calendar.component(.hour, from: date)
+        let minute = calendar.component(.minute, from: date)
+        let suffix = hour < 12 ? "a" : "p"
+        let twelve = hour % 12 == 0 ? 12 : hour % 12
+        return String(format: "%d:%02d%@", twelve, minute, suffix)
     }
 }

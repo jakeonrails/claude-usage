@@ -16,31 +16,71 @@ final class GridMarkTests: XCTestCase {
     private let sevenDays: TimeInterval = 7 * 24 * 3600
 
     func testHourMarksAlignedWindow() {
-        // Window 23:00 → 04:00 UTC: whole hours at 00–04, evenly spaced.
+        // Window 23:00 → 04:00 UTC: both edges on the hour, so both are
+        // labeled — six marks. The interior 04:00 mark yields to the edge one.
         let marks = PopoverView.hourMarks(
             resetsAt: "2026-07-10T04:00:00+00:00", windowDuration: fiveHours, calendar: utc
         )
-        XCTAssertEqual(marks?.map(\.label), ["12a", "1a", "2a", "3a", "4a"])
-        XCTAssertEqual(marks?.map(\.fraction) ?? [], [0.2, 0.4, 0.6, 0.8, 1.0])
+        XCTAssertEqual(marks?.map(\.label), ["11p", "12a", "1a", "2a", "3a", "4a"])
+        XCTAssertEqual(marks?.map(\.fraction) ?? [], [0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
     }
 
     func testHourMarksUnalignedWindow() {
-        // Window 23:30 → 04:30 UTC: still 5 whole hours, offset half a cell.
+        // Window 23:30 → 04:30 UTC: 5 whole hours offset half a cell; the
+        // mid-hour end still gets a minute-precise right-edge label, and the
+        // mid-hour start gets none.
         let marks = PopoverView.hourMarks(
             resetsAt: "2026-07-10T04:30:00+00:00", windowDuration: fiveHours, calendar: utc
         )
-        XCTAssertEqual(marks?.map(\.label), ["12a", "1a", "2a", "3a", "4a"])
-        XCTAssertEqual(marks?.map(\.fraction) ?? [], [0.1, 0.3, 0.5, 0.7, 0.9])
+        XCTAssertEqual(marks?.map(\.label), ["12a", "1a", "2a", "3a", "4a", "4:30a"])
+        XCTAssertEqual(marks?.map(\.fraction) ?? [], [0.1, 0.3, 0.5, 0.7, 0.9, 1.0])
     }
 
     func testHourMarksFractionalSecondsInResetsAt() {
-        // The live API returns fractional seconds; the final top-of-hour is
-        // still inside the window and must not be dropped.
+        // The live API returns fractional seconds just after the hour; both
+        // edges snap to their hour labels.
         let marks = PopoverView.hourMarks(
             resetsAt: "2026-07-10T04:00:00.190065+00:00", windowDuration: fiveHours, calendar: utc
         )
-        XCTAssertEqual(marks?.count, 5)
-        XCTAssertEqual(marks?.last?.label, "4a")
+        XCTAssertEqual(marks?.map(\.label), ["11p", "12a", "1a", "2a", "3a", "4a"])
+        XCTAssertEqual(marks?.first?.fraction, 0.0)
+        XCTAssertEqual(marks?.last?.fraction, 1.0)
+    }
+
+    func testHourMarksJitterBeforeTheHour() {
+        // Reset timestamps sometimes jitter to just BEFORE the hour; the
+        // 04:00 instant then falls outside the window, but the right edge
+        // must still read "4a" (snapped), and the 23:00 interior mark that
+        // creeps in at ~fraction 0 yields to the snapped "11p" edge label.
+        let marks = PopoverView.hourMarks(
+            resetsAt: "2026-07-10T03:59:59.8+00:00", windowDuration: fiveHours, calendar: utc
+        )
+        XCTAssertEqual(marks?.map(\.label), ["11p", "12a", "1a", "2a", "3a", "4a"])
+        XCTAssertEqual(marks?.first?.fraction, 0.0)
+        XCTAssertEqual(marks?.last?.fraction, 1.0)
+    }
+
+    func testHourMarksNearHourEndCrowdsOutInteriorMark() {
+        // Reset 04:04 UTC: the 04:00 interior mark sits ~1.3% from the right
+        // edge and would collide with the edge label, so it's dropped and the
+        // edge snaps to "4a". The 23:04 start is also near enough the hour to
+        // snap to "11p".
+        let marks = PopoverView.hourMarks(
+            resetsAt: "2026-07-10T04:04:00+00:00", windowDuration: fiveHours, calendar: utc
+        )
+        XCTAssertEqual(marks?.map(\.label), ["11p", "12a", "1a", "2a", "3a", "4a"])
+        XCTAssertEqual(marks?.last?.fraction, 1.0)
+    }
+
+    func testHourMarksMidHourEndGetsMinuteLabel() {
+        // Reset 04:10 UTC: too far from the hour to snap, so the right edge
+        // reads "4:10a"; the 04:00 interior mark (~3% from the edge) yields
+        // to it, and the 23:10 start gets no label.
+        let marks = PopoverView.hourMarks(
+            resetsAt: "2026-07-10T04:10:00+00:00", windowDuration: fiveHours, calendar: utc
+        )
+        XCTAssertEqual(marks?.map(\.label), ["12a", "1a", "2a", "3a", "4:10a"])
+        XCTAssertEqual(marks?.last?.fraction, 1.0)
     }
 
     func testHourMarkAtCurrentTimeMatchesClock() {
