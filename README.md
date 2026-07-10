@@ -4,15 +4,16 @@ A tiny macOS menubar app that shows how much Claude Code session quota you have
 left, color-coded.
 
 The popover adapts to your macOS version's window styling. On **macOS Tahoe (26)
-and later** (these shots predate the menubar color block and show the older
-colored-text readout — they need a Tahoe machine to recapture):
+and later**:
 
 <p>
   <img width="300" alt="Claude Code Usage popover — light mode, macOS Tahoe" src="docs/Light.png" />
   <img width="300" alt="Claude Code Usage popover — dark mode, macOS Tahoe" src="docs/Dark.png" />
 </p>
 
-On **macOS Sonoma (14) and Sequoia (15)**:
+On **macOS Sonoma (14) and Sequoia (15)** (these shots predate the
+calendar-aligned gauge gridlines and edge labels — they need a Sonoma/Sequoia
+machine to recapture):
 
 <p>
   <img width="300" alt="Claude Code Usage popover — light mode, macOS Sonoma" src="docs/Light-Sonoma.png" />
@@ -26,9 +27,12 @@ On **macOS Sonoma (14) and Sequoia (15)**:
 - Click the icon for: percent used in the 5-hour window with reset countdown,
   the weekly total + reset countdown, and per-model weekly (Opus / Sonnet) where
   your plan exposes them.
-- Each bar has labeled gridlines (clock hours on the 5-hour bar, weekday names on
-  the weekly bar) and a "you are here" tick showing how far you are through the
-  window — fill past the tick means you're burning quota faster than the clock.
+- Each bar has labeled gridlines that land on real calendar boundaries — each
+  top-of-hour on the 5-hour bar (with the window's start/end labeled on the
+  edges), each midnight (weekday names) on the weekly bar — and a "you are
+  here" tick showing how far you are through the window, reading against the
+  labels like a clock axis. Fill past the tick means you're burning quota
+  faster than the clock.
 - The weekly section also shows a pace line: how many maxed sessions you'd need to
   hit 100%, and how many you're on track for at your current burn rate.
 - Refreshes about every five minutes. The usage endpoint is rate-limited
