@@ -54,8 +54,10 @@ struct UsageGauge: View {
             }
 
             // Gridlines on each interior segment boundary, plus a label centered
-            // under each boundary hash. The final label sits at the bar's right
-            // edge (no interior hash there).
+            // under each boundary hash. Labels name the instant AT the boundary
+            // (the callers compute them that way), so the tick lines up with the
+            // label matching the current time. The final label sits at the bar's
+            // right edge (no interior hash there).
             if let labels = gridLabels, !labels.isEmpty {
                 let divisions = labels.count
                 for i in 1..<divisions {

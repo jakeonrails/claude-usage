@@ -311,35 +311,39 @@ struct PopoverView: View {
         return min(max(elapsed / windowDuration, 0), 1)
     }
 
-    /// Weekday abbreviations (Mon, Tue, …) for each day-cell of the weekly bar.
-    /// The cell `now` falls in is "today"; the rest are counted off the system
-    /// calendar from there. Falls back to plain numbers if the window is stale.
+    /// Instants marking each grid boundary of a window bar: boundary `i` sits at
+    /// windowStart + i·(duration/divisions). Labels derived from these line the
+    /// tick up with the label matching the current time. Nil if the window is
+    /// missing/unparseable.
+    private func boundaryDates(resetsAt: String?, windowDuration: TimeInterval, divisions: Int) -> [Date]? {
+        guard let resetDate = UsageFormat.parseResetsAt(resetsAt) else { return nil }
+        let windowStart = resetDate.addingTimeInterval(-windowDuration)
+        let segment = windowDuration / Double(divisions)
+        return (1...divisions).map { windowStart.addingTimeInterval(segment * Double($0)) }
+    }
+
+    /// Weekday abbreviations (Mon, Tue, …) for the weekly bar's grid boundaries:
+    /// each label is the weekday at that boundary instant, so the tick reads
+    /// against them like an axis. Falls back to plain numbers if the window is
+    /// stale.
     private func weekdayLabels(resetsAt: String?, windowDuration: TimeInterval, divisions: Int) -> [String] {
-        guard let frac = elapsedFraction(resetsAt: resetsAt, windowDuration: windowDuration) else {
+        guard let dates = boundaryDates(resetsAt: resetsAt, windowDuration: windowDuration, divisions: divisions) else {
             return (1...divisions).map { "\($0)" }
         }
         let symbols = Calendar.current.shortWeekdaySymbols   // ["Sun"…"Sat"], locale-aware
-        // 1-based cell that `now` sits in == today. floor(frac*divisions) can hit
-        // `divisions` exactly when frac == 1, so clamp.
-        let currentCell = min(divisions, Int(frac * Double(divisions)) + 1)
-        let todayIndex = Calendar.current.component(.weekday, from: now) - 1   // 0=Sun…6=Sat
-        return (1...divisions).map { cell in
-            let idx = ((todayIndex + (cell - currentCell)) % 7 + 7) % 7
-            return symbols[idx]
-        }
+        return dates.map { symbols[Calendar.current.component(.weekday, from: $0) - 1] }
     }
 
-    /// Clock-hour labels (12a, 1a, …, 11p) for each hour-cell of the session
-    /// bar. The cell `now` falls in is the current clock hour; the rest count
-    /// off it. Falls back to plain numbers if the window is stale.
+    /// Clock-hour labels (12a, 1a, …, 11p) for the session bar's grid
+    /// boundaries: each label is the clock hour at that boundary instant, so
+    /// the tick sits on "7p" at 7pm. Falls back to plain numbers if the window
+    /// is stale.
     private func hourLabels(resetsAt: String?, windowDuration: TimeInterval, divisions: Int) -> [String] {
-        guard let frac = elapsedFraction(resetsAt: resetsAt, windowDuration: windowDuration) else {
+        guard let dates = boundaryDates(resetsAt: resetsAt, windowDuration: windowDuration, divisions: divisions) else {
             return (1...divisions).map { "\($0)" }
         }
-        let currentCell = min(divisions, Int(frac * Double(divisions)) + 1)
-        let currentHour = Calendar.current.component(.hour, from: now)
-        return (1...divisions).map { cell in
-            let hour = ((currentHour + (cell - currentCell)) % 24 + 24) % 24
+        return dates.map { date in
+            let hour = Calendar.current.component(.hour, from: date)
             let suffix = hour < 12 ? "a" : "p"
             let twelve = hour % 12 == 0 ? 12 : hour % 12
             return "\(twelve)\(suffix)"
