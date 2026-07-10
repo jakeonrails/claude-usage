@@ -91,9 +91,9 @@ struct PopoverView: View {
                     utilization: util,
                     timeElapsedFraction: elapsedFraction(resetsAt: window?.resets_at, windowDuration: Self.fiveHourWindow),
                     fillColor: UsageColor.swiftUIColor(forUsed: util),
-                    gridLabels: hourLabels(resetsAt: window?.resets_at, windowDuration: Self.fiveHourWindow, divisions: 5)
+                    gridMarks: Self.hourMarks(resetsAt: window?.resets_at, windowDuration: Self.fiveHourWindow)
                 )
-                .help("Gridlines mark each hour of the 5-hour window; the tick marks where you are. Fill past the tick = using faster than the clock.")
+                .help("Gridlines mark each top-of-hour in the 5-hour window; the tick marks where you are. Fill past the tick = using faster than the clock.")
             }
         }
     }
@@ -156,9 +156,9 @@ struct PopoverView: View {
                     utilization: util,
                     timeElapsedFraction: elapsedFraction(resetsAt: window?.resets_at, windowDuration: Self.weeklyWindow),
                     fillColor: UsageColor.swiftUIColor(forUsed: util),
-                    gridLabels: weekdayLabels(resetsAt: window?.resets_at, windowDuration: Self.weeklyWindow, divisions: 7)
+                    gridMarks: Self.weekdayMarks(resetsAt: window?.resets_at, windowDuration: Self.weeklyWindow)
                 )
-                .help("Gridlines mark each day of the 7-day window; the tick marks where you are. Fill past the tick = using faster than the clock.")
+                .help("Gridlines mark each midnight in the 7-day window; the tick marks where you are. Fill past the tick = using faster than the clock.")
             }
         }
     }
@@ -311,39 +311,49 @@ struct PopoverView: View {
         return min(max(elapsed / windowDuration, 0), 1)
     }
 
-    /// Instants marking each grid boundary of a window bar: boundary `i` sits at
-    /// windowStart + i·(duration/divisions). Labels derived from these line the
-    /// tick up with the label matching the current time. Nil if the window is
+    /// Grid marks at every whole-`unit` calendar instant (top-of-hour,
+    /// midnight) strictly inside the window, positioned at that instant's
+    /// elapsed fraction — so hashes land on intuitive clock/calendar
+    /// boundaries even when the window itself doesn't start on one, and the
+    /// tick reads against them like an axis. Nil (no grid) if the window is
     /// missing/unparseable.
-    private func boundaryDates(resetsAt: String?, windowDuration: TimeInterval, divisions: Int) -> [Date]? {
+    static func calendarMarks(
+        resetsAt: String?,
+        windowDuration: TimeInterval,
+        unit: Calendar.Component,
+        calendar: Calendar = .current,
+        label: (Date) -> String
+    ) -> [UsageGauge.GridMark]? {
         guard let resetDate = UsageFormat.parseResetsAt(resetsAt) else { return nil }
         let windowStart = resetDate.addingTimeInterval(-windowDuration)
-        let segment = windowDuration / Double(divisions)
-        return (1...divisions).map { windowStart.addingTimeInterval(segment * Double($0)) }
+        // First whole-unit instant after the window start, then step one unit
+        // at a time (calendar-aware, so DST-length days stay honest).
+        guard var boundary = calendar.dateInterval(of: unit, for: windowStart)?.end else { return nil }
+        var marks: [UsageGauge.GridMark] = []
+        while boundary <= resetDate {
+            marks.append(UsageGauge.GridMark(
+                fraction: boundary.timeIntervalSince(windowStart) / windowDuration,
+                label: label(boundary)
+            ))
+            guard let next = calendar.date(byAdding: unit, value: 1, to: boundary) else { break }
+            boundary = next
+        }
+        return marks
     }
 
-    /// Weekday abbreviations (Mon, Tue, …) for the weekly bar's grid boundaries:
-    /// each label is the weekday at that boundary instant, so the tick reads
-    /// against them like an axis. Falls back to plain numbers if the window is
-    /// stale.
-    private func weekdayLabels(resetsAt: String?, windowDuration: TimeInterval, divisions: Int) -> [String] {
-        guard let dates = boundaryDates(resetsAt: resetsAt, windowDuration: windowDuration, divisions: divisions) else {
-            return (1...divisions).map { "\($0)" }
+    /// Weekday marks (Mon, Tue, …) at each midnight inside the weekly window.
+    static func weekdayMarks(resetsAt: String?, windowDuration: TimeInterval, calendar: Calendar = .current) -> [UsageGauge.GridMark]? {
+        let symbols = calendar.shortWeekdaySymbols   // ["Sun"…"Sat"], locale-aware
+        return calendarMarks(resetsAt: resetsAt, windowDuration: windowDuration, unit: .day, calendar: calendar) {
+            symbols[calendar.component(.weekday, from: $0) - 1]
         }
-        let symbols = Calendar.current.shortWeekdaySymbols   // ["Sun"…"Sat"], locale-aware
-        return dates.map { symbols[Calendar.current.component(.weekday, from: $0) - 1] }
     }
 
-    /// Clock-hour labels (12a, 1a, …, 11p) for the session bar's grid
-    /// boundaries: each label is the clock hour at that boundary instant, so
-    /// the tick sits on "7p" at 7pm. Falls back to plain numbers if the window
-    /// is stale.
-    private func hourLabels(resetsAt: String?, windowDuration: TimeInterval, divisions: Int) -> [String] {
-        guard let dates = boundaryDates(resetsAt: resetsAt, windowDuration: windowDuration, divisions: divisions) else {
-            return (1...divisions).map { "\($0)" }
-        }
-        return dates.map { date in
-            let hour = Calendar.current.component(.hour, from: date)
+    /// Clock-hour marks (12a, 1a, …, 11p) at each top-of-hour inside the
+    /// session window, so the tick sits on "7p" at 7pm.
+    static func hourMarks(resetsAt: String?, windowDuration: TimeInterval, calendar: Calendar = .current) -> [UsageGauge.GridMark]? {
+        calendarMarks(resetsAt: resetsAt, windowDuration: windowDuration, unit: .hour, calendar: calendar) { date in
+            let hour = calendar.component(.hour, from: date)
             let suffix = hour < 12 ? "a" : "p"
             let twelve = hour % 12 == 0 ? 12 : hour % 12
             return "\(twelve)\(suffix)"

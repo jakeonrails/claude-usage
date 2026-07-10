@@ -4,9 +4,17 @@ import SwiftUI
 /// how far through the time window the user is. If the fill is past the tick,
 /// usage is outpacing the clock.
 ///
-/// An optional grid divides the bar into equal segments (e.g. 5 hours or 7
-/// days) with thin black boundary lines and a small number under each segment.
+/// An optional grid draws a labeled hash at each supplied fraction of the bar
+/// (e.g. every top-of-hour or midnight inside the window), so marks land on
+/// intuitive clock/calendar instants even when the window doesn't start on one.
 struct UsageGauge: View {
+    /// A labeled gridline: `fraction` (0–1) positions the hash along the bar;
+    /// `label` names the instant at that position.
+    struct GridMark: Equatable {
+        let fraction: Double
+        let label: String
+    }
+
     /// 0–100, clamped on render. Values >100 cap at the right edge.
     let utilization: Double
 
@@ -15,10 +23,9 @@ struct UsageGauge: View {
 
     let fillColor: Color
 
-    /// One label per equal segment; the bar is divided into `gridLabels.count`
-    /// segments with a thin hash on each interior boundary and the matching
-    /// label under each. `nil`/empty = no grid.
-    var gridLabels: [String]? = nil
+    /// Labeled gridlines; a thin hash is drawn at each mark's fraction with
+    /// its label centered underneath. `nil`/empty = no grid.
+    var gridMarks: [GridMark]? = nil
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -26,7 +33,7 @@ struct UsageGauge: View {
     private let tickOverhang: CGFloat = 5
     private let labelHeight: CGFloat = 12
 
-    private var labelSpace: CGFloat { (gridLabels?.isEmpty ?? true) ? 0 : labelHeight }
+    private var labelSpace: CGFloat { (gridMarks?.isEmpty ?? true) ? 0 : labelHeight }
     private var barHeight: CGFloat { trackHeight + tickOverhang * 2 }
 
     var body: some View {
@@ -53,30 +60,29 @@ struct UsageGauge: View {
                 )
             }
 
-            // Gridlines on each interior segment boundary, plus a label centered
-            // under each boundary hash. Labels name the instant AT the boundary
-            // (the callers compute them that way), so the tick lines up with the
-            // label matching the current time. The final label sits at the bar's
-            // right edge (no interior hash there).
-            if let labels = gridLabels, !labels.isEmpty {
-                let divisions = labels.count
-                for i in 1..<divisions {
-                    let x = size.width * CGFloat(i) / CGFloat(divisions)
-                    var line = Path()
-                    line.move(to: CGPoint(x: x, y: trackY))
-                    line.addLine(to: CGPoint(x: x, y: trackY + trackHeight))
-                    context.stroke(line, with: .color(.black), lineWidth: 1)
-                }
-                for i in 1...divisions {
-                    let boundaryX = size.width * CGFloat(i) / CGFloat(divisions)
+            // A hash at each grid mark's fraction with its label centered
+            // underneath. Labels name the instant AT the mark, so the tick
+            // lines up with the label matching the current time. Marks at the
+            // bar's edges keep their label but skip the hash (nothing to
+            // divide there).
+            if let marks = gridMarks, !marks.isEmpty {
+                for mark in marks {
+                    let frac = min(max(mark.fraction, 0), 1)
+                    let markX = size.width * frac
+                    if frac > 0.001, frac < 0.999 {
+                        var line = Path()
+                        line.move(to: CGPoint(x: markX, y: trackY))
+                        line.addLine(to: CGPoint(x: markX, y: trackY + trackHeight))
+                        context.stroke(line, with: .color(.black), lineWidth: 1)
+                    }
                     let resolved = context.resolve(
-                        Text(labels[i - 1])
+                        Text(mark.label)
                             .font(.system(size: 8, weight: .medium))
                             .foregroundStyle(.secondary)
                     )
-                    // Center the label on its hash, clamping the edge label in.
+                    // Center the label on its hash, clamping edge labels in.
                     let half = resolved.measure(in: size).width / 2
-                    let x = min(max(boundaryX, half), size.width - half)
+                    let x = min(max(markX, half), size.width - half)
                     context.draw(
                         resolved,
                         at: CGPoint(x: x, y: barHeight + 1),
