@@ -33,6 +33,8 @@ private final class PopoverPanel: NSPanel {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let store = UsageStore()
     private let updateChecker = UpdateChecker()
+    private let breakdownService = UsageBreakdownService.live()
+    private lazy var breakdownController = BreakdownWindowController(service: breakdownService, store: store)
     private var statusItem: NSStatusItem!
     private var panel: PopoverPanel!
     private var hostingController: NSHostingController<PopoverView>!
@@ -84,7 +86,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: Panel construction
 
     private func buildPanel() {
-        hostingController = NSHostingController(rootView: PopoverView(store: store, updateChecker: updateChecker))
+        hostingController = NSHostingController(rootView: PopoverView(
+            store: store, updateChecker: updateChecker,
+            onShowBreakdown: { [weak self] in self?.breakdownController.show() }
+        ))
         // Report the SwiftUI ideal size as preferredContentSize so we can size
         // the panel to the content (and resize-follow when it changes).
         hostingController.sizingOptions = [.preferredContentSize]
@@ -239,10 +244,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hostingController.view.layoutSubtreeIfNeeded()
         var size = hostingController.view.fittingSize
         if size.width < 1 || size.height < 1 { size = NSSize(width: panelWidth, height: 200) }
+        // On the very first click after launch the hosting view can report a
+        // degenerate fittingSize before SwiftUI's initial layout settles; an
+        // over-tall panel drives the origin math (topEdge - height) below the
+        // screen. Clamp to the visible frame — followContentSize corrects the
+        // size once the real preferredContentSize lands.
+        if let visible = (statusItem.button?.window?.screen ?? NSScreen.main)?.visibleFrame,
+           size.width > visible.width || size.height > visible.height {
+            NSLog("ClaudeUsage: clamping degenerate panel fittingSize %@ to screen %@",
+                  NSStringFromSize(size), NSStringFromSize(visible.size))
+            size.width = min(size.width, visible.width)
+            size.height = min(size.height, visible.height)
+        }
         panel.setContentSize(size)
 
         guard let finalOrigin = panelOrigin(for: panel.frame.size) else {
+            // Status-item geometry unresolved (seen on the first click right
+            // after launch). Never fall through to the panel's default frame —
+            // its (0,0) origin puts the popover at the bottom-left corner.
+            NSLog("ClaudeUsage: panelOrigin unresolved (button=%d window=%d screen=%d) — using top-right fallback",
+                  statusItem.button != nil ? 1 : 0,
+                  statusItem.button?.window != nil ? 1 : 0,
+                  statusItem.button?.window?.screen != nil ? 1 : 0)
+            if let visible = NSScreen.main?.visibleFrame {
+                panel.setFrameOrigin(NSPoint(
+                    x: visible.maxX - panel.frame.width - 8,
+                    y: visible.maxY - panel.frame.height
+                ))
+            }
             panel.makeKeyAndOrderFront(nil)
+            clearInitialFocus()
             return
         }
 
@@ -251,6 +282,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.setFrameOrigin(NSPoint(x: finalOrigin.x, y: finalOrigin.y + slideDistance))
         panel.alphaValue = 0
         panel.makeKeyAndOrderFront(nil)
+        clearInitialFocus()
         statusItem.button?.highlight(true)
 
         NSAnimationContext.runAnimationGroup { ctx in
@@ -272,6 +304,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // don't reach a global monitor, so they don't double-toggle.
         clickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             Task { @MainActor in self?.closePanel() }
+        }
+    }
+
+    /// Drop the panel's first responder right after it becomes key. The
+    /// connected popover has no text entry, so an auto-focused control just
+    /// paints an accent-colored focus ring (the "nagging green highlight" on
+    /// the gear/first control). Clearing focus removes the ring without
+    /// affecting clicks; we do it now and again next runloop tick because
+    /// SwiftUI re-seats first responder as its hierarchy settles. Skipped when
+    /// disconnected so ConnectAccountView's paste field keeps its focus.
+    private func clearInitialFocus() {
+        guard !store.needsConnection else { return }
+        panel.makeFirstResponder(nil)
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.store.needsConnection else { return }
+            self.panel.makeFirstResponder(nil)
         }
     }
 

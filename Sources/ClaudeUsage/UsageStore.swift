@@ -48,6 +48,11 @@ final class UsageStore: ObservableObject {
     /// the menubar responsive while still amortizing token rotations to
     /// roughly one every ~25 min in the steady state.
     private let refreshInterval: TimeInterval = 300
+    /// Append-only log of exact 5h/7d/weekly-scoped window boundaries, fed on
+    /// every successful fetch below. Read by `UsageBreakdownService` (via its
+    /// own `WindowLog` instance over the same file) to resolve exact past 5h
+    /// windows instead of falling back to heuristic reconstruction.
+    private let windowLog = WindowLog.live()
 
     init() {
         needsConnection = !AppCredentials.hasCredentials()
@@ -109,6 +114,7 @@ final class UsageStore: ObservableObject {
                 rateLimitedUntil = nil
             }
             UsageCache.save(usage, at: now)
+            Task { await self.windowLog.record(usage, observedAt: now) }
         } catch UsageAPIError.rateLimited(let retryAfter) {
             rateLimitedUntil = Date().addingTimeInterval(retryAfter)
             lastRateLimit = UsageAPI.lastRateLimit

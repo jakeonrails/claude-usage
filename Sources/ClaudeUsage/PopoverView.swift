@@ -3,6 +3,7 @@ import SwiftUI
 struct PopoverView: View {
     @ObservedObject var store: UsageStore
     @ObservedObject var updateChecker: UpdateChecker
+    var onShowBreakdown: () -> Void = {}
     @State private var now: Date = Date()
 
     private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -211,28 +212,21 @@ struct PopoverView: View {
                         .monospacedDigit()
                 }
             }
-            HStack {
+            // Two controls, one visual language: a primary Refresh and a gear
+            // menu that holds everything occasional. `focusEffectDisabled()`
+            // stops the popover from parking a keyboard focus ring on the first
+            // control the moment it opens.
+            HStack(spacing: 12) {
                 Spacer()
-                if let update = updateChecker.available {
-                    updateButton(update)
-                        .controlSize(.small)
-                }
                 refreshButton
-                    .controlSize(.small)
-                Menu {
-                    Toggle("Invert menu bar colors", isOn: $store.invertMenubarColors)
-                        .help("On: solid color block behind the percentage. Off: colored text on the bare menu bar.")
-                    Divider()
-                    Button("Disconnect account") { store.disconnect() }
-                    Button("Quit") { NSApp.terminate(nil) }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
+                settingsMenu
             }
+            .focusEffectDisabled()
         }
     }
+
+    /// Shared sizing so the Refresh and gear glyphs read as one control pair.
+    private static let footerIconFont = Font.system(size: 15, weight: .regular)
 
     private var refreshButton: some View {
         let isLoading = { if case .loading = store.state { return true }; return false }()
@@ -249,27 +243,64 @@ struct PopoverView: View {
         // per-token budget on demand. The same click also re-runs the GitHub
         // update check (separate Task so it doesn't wait on the usage fetch),
         // so you can trigger an update probe on demand right after pushing.
-        return Button("Refresh") {
+        return Button {
             Task { await store.refresh(force: true) }
             Task { await updateChecker.check() }
+        } label: {
+            Image(systemName: "arrow.clockwise")
+                .font(Self.footerIconFont)
+                .padding(3)
         }
+        .buttonStyle(.borderless)
         .disabled(isLoading)
         .help(tip)
     }
 
-    /// Only shown when GitHub reports `main` is ahead of this build. Clicking it
-    /// pops a dialog with the update one-liner (alert-only — we never run git or
-    /// touch the user's checkout for them).
-    private func updateButton(_ update: UpdateChecker.Available) -> some View {
-        let commits = "\(update.aheadBy) commit\(update.aheadBy == 1 ? "" : "s")"
-        return Button {
-            showUpdateInstructions(aheadBy: update.aheadBy)
+    /// The single overflow menu: the breakdown action, settings, a contextual
+    /// update entry, and the account/quit actions. A blue dot rides the gear
+    /// when an update is available, so the control itself signals "look inside"
+    /// without a separate button jostling the row.
+    private var settingsMenu: some View {
+        Menu {
+            Button {
+                onShowBreakdown()
+            } label: {
+                Label("What ate my tokens?", systemImage: "chart.bar.xaxis")
+            }
+            Divider()
+            Toggle("Invert menu bar colors", isOn: $store.invertMenubarColors)
+                .help("On: solid color block behind the percentage. Off: colored text on the bare menu bar.")
+            if let update = updateChecker.available {
+                Divider()
+                Button {
+                    showUpdateInstructions(aheadBy: update.aheadBy)
+                } label: {
+                    let commits = "\(update.aheadBy) commit\(update.aheadBy == 1 ? "" : "s")"
+                    Label("Update available (\(commits) behind)…", systemImage: "arrow.down.circle.fill")
+                }
+            }
+            Divider()
+            Button("Logout") { store.disconnect() }
+            Button("Quit") { NSApp.terminate(nil) }
         } label: {
-            Image(systemName: "arrow.down.circle.fill")
-                .foregroundStyle(.blue)
+            Image(systemName: "gearshape")
+                .font(Self.footerIconFont)
+                // Badge over the glyph, then pad — so the dot sits inside the
+                // label's bounds and the borderless menu can't clip it. Same
+                // 3pt pad as the Refresh icon keeps the two the same scale.
+                .overlay(alignment: .topTrailing) {
+                    if updateChecker.available != nil {
+                        Circle()
+                            .fill(.blue)
+                            .frame(width: 6, height: 6)
+                    }
+                }
+                .padding(3)
         }
-        .buttonStyle(.borderless)
-        .help("Update available — you're \(commits) behind. Click for update instructions.")
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Settings and actions")
     }
 
     private func showUpdateInstructions(aheadBy: Int) {
