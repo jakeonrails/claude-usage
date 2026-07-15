@@ -117,25 +117,38 @@ for attempt in 1 2 3; do
   sleep 1.0   # let the open/slide animation settle
 done
 
-# 3. Resolve the popover bounds, then capture from the top of the screen down
-#    through it so the menubar strip is included, with a little padding for the
-#    drop shadow / rounded corners (matching the existing README shots).
+# 3. Capture. The popover is captured by WINDOW ID (`screencapture -l`), which
+#    grabs that exact window's bitmap even if another window overlaps it — the
+#    old region capture (`-R`) grabbed whatever pixels were on top, so an
+#    un-hideable accessory/menubar app sitting over the popover corrupted the
+#    shot. Then the menu-bar strip (region capture from y=0 to the popover's top
+#    — safe, the system menu bar is always the topmost layer) is stacked above
+#    it, so the README shot still shows the menubar percentage.
 if BOUNDS="$(swift "$HERE/find-popover-window.swift" "$PID" 2>/dev/null)"; then
   read -r WIN X Y W H <<<"$BOUNDS"
-  # Just enough padding for the popover's drop shadow / rounded corners. Keep it
-  # small: any other app's window sitting behind the desktop can bleed into a
-  # wide margin (menubar/accessory apps can't be hidden by the step above).
-  PAD=7
-  RX=$(( X - PAD ));      (( RX < 0 )) && RX=0
-  RW=$(( W + PAD * 2 ))
-  RH=$(( Y + H + PAD ))
-  screencapture -x -R"${RX},0,${RW},${RH}" "$OUT"
-  echo "Saved $OUT  (popover window $WIN at ${X},${Y} ${W}x${H})"
+  TMP="$(mktemp -d)"
+  trap 'rm -rf "$TMP"' EXIT
+  # Popover: overlap-proof window capture (includes its own shadow/rounded
+  # corners). `-o` omits the extra window drop-shadow border screencapture adds.
+  screencapture -x -o -l"$WIN" "$TMP/popover.png"
+  # Menu-bar strip: everything from the top of the screen down to the popover's
+  # top edge, at the popover's x-range and width.
+  if (( Y > 0 )); then
+    screencapture -x -R"${X},0,${W},${Y}" "$TMP/strip.png"
+    if swift "$HERE/stack-images.swift" "$TMP/strip.png" "$TMP/popover.png" "$OUT" 2>/dev/null; then
+      echo "Saved $OUT  (menubar strip + popover window $WIN at ${X},${Y} ${W}x${H})"
+    else
+      cp "$TMP/popover.png" "$OUT"
+      echo "Saved $OUT  (popover window $WIN only — strip compositing failed)"
+    fi
+  else
+    cp "$TMP/popover.png" "$OUT"
+    echo "Saved $OUT  (popover window $WIN at ${X},${Y} ${W}x${H})"
+  fi
 else
-  echo "warning: couldn't locate the popover window — capturing the full screen instead." >&2
-  echo "         (popover may not have opened; check Accessibility permission.)" >&2
-  screencapture -x "$OUT"
-  echo "Saved $OUT (full screen — crop manually)."
+  echo "error: couldn't locate the popover window (is it open? Accessibility granted?)." >&2
+  echo "       Not falling back to a full-screen grab — that just captures noise." >&2
+  exit 3
 fi
 
 echo "Rename into docs/ per the README convention (Light/Dark[-Sonoma].png)."
