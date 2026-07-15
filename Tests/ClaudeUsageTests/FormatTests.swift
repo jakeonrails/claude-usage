@@ -4,6 +4,45 @@ import AppKit
 
 final class FormatTests: XCTestCase {
 
+    // MARK: - UsageFormat.menubarActiveText
+
+    func testMenubarActiveText_belowLimitShowsPercent() {
+        let now = Date(timeIntervalSinceReferenceDate: 0)
+        let resets = now.addingTimeInterval(2 * 3600)
+        XCTAssertEqual(
+            UsageFormat.menubarActiveText(percent: 57, resets: resets, showResetTimeAtLimit: true, now: now),
+            "57%"
+        )
+    }
+
+    func testMenubarActiveText_atLimitShowsResetCountdown() {
+        let now = Date(timeIntervalSinceReferenceDate: 0)
+        let resets = now.addingTimeInterval(2 * 3600 + 34 * 60)  // 2h 34m
+        XCTAssertEqual(
+            UsageFormat.menubarActiveText(percent: 100, resets: resets, showResetTimeAtLimit: true, now: now),
+            "2h 34m"
+        )
+    }
+
+    func testMenubarActiveText_atLimitWithSettingOffShowsPercent() {
+        let now = Date(timeIntervalSinceReferenceDate: 0)
+        let resets = now.addingTimeInterval(2 * 3600)
+        XCTAssertEqual(
+            UsageFormat.menubarActiveText(percent: 100, resets: resets, showResetTimeAtLimit: false, now: now),
+            "100%"
+        )
+    }
+
+    func testMenubarActiveText_overLimitStillShowsCountdown() {
+        // utilization can round past 100; treat >=100 as capped.
+        let now = Date(timeIntervalSinceReferenceDate: 0)
+        let resets = now.addingTimeInterval(45 * 60)  // 45m
+        XCTAssertEqual(
+            UsageFormat.menubarActiveText(percent: 101, resets: resets, showResetTimeAtLimit: true, now: now),
+            "45m"
+        )
+    }
+
     // MARK: - UsageFormat.compactDuration
 
     func testCompactDuration_hoursAndMinutes() {
