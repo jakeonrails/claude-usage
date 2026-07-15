@@ -36,6 +36,14 @@ final class UsageStore: ObservableObject {
         didSet { UserDefaults.standard.set(invertMenubarColors, forKey: UsageStore.invertMenubarColorsKey) }
     }
     private static let invertMenubarColorsKey = "invertMenubarColors"
+    /// When the 5-hour window is maxed out, show the time until it resets
+    /// (e.g. "2h 34m") in the menu bar instead of a static "100%" — the reset
+    /// countdown is the only thing left the user can act on. Persisted;
+    /// AppDelegate repaints via objectWillChange on change.
+    @Published var showResetTimeAtLimit: Bool = UserDefaults.standard.object(forKey: UsageStore.showResetTimeAtLimitKey) as? Bool ?? true {
+        didSet { UserDefaults.standard.set(showResetTimeAtLimit, forKey: UsageStore.showResetTimeAtLimitKey) }
+    }
+    private static let showResetTimeAtLimitKey = "showResetTimeAtLimit"
 
     private var timer: Timer?
     /// Last time we proactively refreshed the OAuth token in response to a
@@ -258,7 +266,12 @@ final class UsageStore: ObservableObject {
             let used = max(0, min(100, window.utilization ?? 0))
             let rounded = Int(used.rounded())
             if rounded == 0 { return ("0%", .labelColor, false) }
-            return ("\(rounded)%", UsageColor.nsColor(forUsed: used), invertMenubarColors)
+            let text = UsageFormat.menubarActiveText(
+                percent: rounded,
+                resets: resets,
+                showResetTimeAtLimit: showResetTimeAtLimit
+            )
+            return (text, UsageColor.nsColor(forUsed: used), invertMenubarColors)
         }
         // No fresh data. Distinguish the various "no data" states so the user
         // knows whether to click and act.
@@ -317,5 +330,17 @@ enum UsageFormat {
     static func percentString(_ util: Double?) -> String {
         guard let util else { return "—" }
         return "\(Int(util.rounded()))%"
+    }
+
+    /// Menu-bar text for an active (>0%) 5-hour window. Normally the
+    /// percentage ("57%"), but when the window is maxed (100%) and
+    /// `showResetTimeAtLimit` is on, the countdown to `resets` ("2h 34m")
+    /// instead: at the cap the remaining time is the only actionable number
+    /// left, so "100%" just wastes the slot.
+    static func menubarActiveText(percent: Int, resets: Date, showResetTimeAtLimit: Bool, now: Date = Date()) -> String {
+        if percent >= 100, showResetTimeAtLimit {
+            return compactDuration(until: resets, now: now)
+        }
+        return "\(percent)%"
     }
 }
