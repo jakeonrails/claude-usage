@@ -209,6 +209,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         invert.target = self
         invert.state = store.invertMenubarColors ? .on : .off
         menu.addItem(invert)
+        let resetTime = NSMenuItem(
+            title: "Show Reset Time at 100%",
+            action: #selector(toggleShowResetTimeAtLimit(_:)),
+            keyEquivalent: ""
+        )
+        resetTime.target = self
+        resetTime.state = store.showResetTimeAtLimit ? .on : .off
+        menu.addItem(resetTime)
         menu.addItem(.separator())
         // A local selector (not NSApplication.terminate(_:)) and no key
         // equivalent: macOS auto-decorates well-known selectors with a system
@@ -228,6 +236,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func toggleInvertColors(_ sender: Any?) {
         store.invertMenubarColors.toggle()
+    }
+
+    @objc private func toggleShowResetTimeAtLimit(_ sender: Any?) {
+        store.showResetTimeAtLimit.toggle()
     }
 
     @objc private func quitApp(_ sender: Any?) {
