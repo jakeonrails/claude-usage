@@ -88,7 +88,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func buildPanel() {
         hostingController = NSHostingController(rootView: PopoverView(
             store: store, updateChecker: updateChecker,
-            onShowBreakdown: { [weak self] in self?.breakdownController.show() }
+            onShowBreakdown: { [weak self] in
+                // The breakdown window replaces the panel as the focus of
+                // attention — leaving the panel up would overlap it.
+                self?.closePanel()
+                self?.breakdownController.show()
+            }
         ))
         // Report the SwiftUI ideal size as preferredContentSize so we can size
         // the panel to the content (and resize-follow when it changes).
