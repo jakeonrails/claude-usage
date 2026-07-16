@@ -32,12 +32,30 @@ final class BreakdownWindowController {
 
     private func makeWindow() -> NSWindow {
         let hosting = NSHostingController(rootView: BreakdownView(vm: vm))
-        let window = NSWindow(contentViewController: hosting)
+        let window = KeyCloseableWindow(contentViewController: hosting)
         window.title = "Usage Breakdown"
         window.styleMask = [.titled, .closable, .resizable]
         window.isReleasedWhenClosed = false
         window.setContentSize(NSSize(width: 460, height: 460))
         window.center()
         return window
+    }
+}
+
+/// As an accessory app we have no menu bar, so there's no Close menu item to
+/// give ⌘W its key equivalent — handle it (and Escape) on the window itself.
+private final class KeyCloseableWindow: NSWindow {
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+           event.charactersIgnoringModifiers == "w" {
+            close()
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
+    // Escape reaches the window as cancelOperation(_:) via the responder chain.
+    override func cancelOperation(_ sender: Any?) {
+        close()
     }
 }
