@@ -269,7 +269,7 @@ struct PopoverView: View {
             }
             Divider()
             Toggle("Invert menu bar colors", isOn: $store.invertMenubarColors)
-                .help("On: solid color block behind the percentage. Off: colored text on the bare menu bar.")
+                .help("Off: solid color block behind the percentage. On: colored text on the bare menu bar.")
             Toggle("Show reset time at 100%", isOn: $store.showResetTimeAtLimit)
                 .help("At 100%, show the time until the session resets (e.g. \"2h 34m\") instead of \"100%\".")
             if let update = updateChecker.available {

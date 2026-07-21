@@ -29,13 +29,16 @@ final class UsageStore: ObservableObject {
     /// When the next automatic refresh will fire. Surfaced in the popover so
     /// users don't compulsively click Refresh and rate-limit themselves.
     @Published private(set) var nextRefreshAt: Date?
-    /// Menubar style: true = solid color block with contrasting text (the
-    /// "inverted" look), false = the classic colored-text-on-clear style.
-    /// Persisted; AppDelegate repaints via objectWillChange on change.
-    @Published var invertMenubarColors: Bool = UserDefaults.standard.object(forKey: UsageStore.invertMenubarColorsKey) as? Bool ?? true {
+    /// Menubar style: false (the default) = solid color block with contrasting
+    /// text, true ("inverted") = the classic colored-text-on-clear style. The
+    /// solid block is the normal look, so inverting turns it back into plain
+    /// colored text. Persisted under a v2 key so stored values from the old
+    /// (flipped) meaning don't carry over; AppDelegate repaints via
+    /// objectWillChange on change.
+    @Published var invertMenubarColors: Bool = UserDefaults.standard.object(forKey: UsageStore.invertMenubarColorsKey) as? Bool ?? false {
         didSet { UserDefaults.standard.set(invertMenubarColors, forKey: UsageStore.invertMenubarColorsKey) }
     }
-    private static let invertMenubarColorsKey = "invertMenubarColors"
+    private static let invertMenubarColorsKey = "invertMenubarColorsV2"
     /// When the 5-hour window is maxed out, show the time until it resets
     /// (e.g. "2h 34m") in the menu bar instead of a static "100%" — the reset
     /// countdown is the only thing left the user can act on. Persisted;
@@ -256,8 +259,9 @@ final class UsageStore: ObservableObject {
     /// `filled` requests a solid color block (the gradient color as background,
     /// drawn black-on-color) instead of colored-on-clear text — far more legible
     /// in the menu bar than a thin colored glyph. Only the active percent states
-    /// (>0%) fill — and only when `invertMenubarColors` is on; the
-    /// `0%`/emoji/error states stay plain so they blend in.
+    /// (>0%) fill — and only when `invertMenubarColors` is off (the default);
+    /// inverting drops back to plain colored text. The `0%`/emoji/error states
+    /// stay plain so they blend in.
     var menubarLabel: (text: String, color: NSColor, filled: Bool) {
         // An active (not-yet-reset) window: show its percentage, treating a
         // missing utilization as 0% used.
@@ -271,7 +275,7 @@ final class UsageStore: ObservableObject {
                 resets: resets,
                 showResetTimeAtLimit: showResetTimeAtLimit
             )
-            return (text, UsageColor.nsColor(forUsed: used), invertMenubarColors)
+            return (text, UsageColor.nsColor(forUsed: used), !invertMenubarColors)
         }
         // No fresh data. Distinguish the various "no data" states so the user
         // knows whether to click and act.
