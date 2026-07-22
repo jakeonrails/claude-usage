@@ -41,6 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var cancellables: Set<AnyCancellable> = []
     private var sizeObservation: NSKeyValueObservation?
     private var clickMonitor: Any?
+    private var titleClockTimer: Timer?
 
     // Visual + motion tuning.
     private let panelWidth: CGFloat = 280
@@ -68,6 +69,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .store(in: &cancellables)
 
         updateStatusItemTitle()
+
+        // The time-progress indicator moves with the clock, not just with
+        // data refreshes; repaint once a minute so the mark keeps creeping
+        // between the 5-minute polls (~1px per 6-7 min at typical pill widths).
+        let clock = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.updateStatusItemTitle() }
+        }
+        clock.tolerance = 5
+        titleClockTimer = clock
 
         // Accessory apps have no main menu, so Cmd+V/A/C/X have no
         // responder. Wire up a minimal Edit menu so paste works in TextFields.
@@ -227,6 +237,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         resetTime.target = self
         resetTime.state = store.showResetTimeAtLimit ? .on : .off
         menu.addItem(resetTime)
+        let progress = NSMenuItem(
+            title: "5h Session Progress",
+            action: #selector(toggleSessionProgress(_:)),
+            keyEquivalent: ""
+        )
+        progress.target = self
+        progress.state = store.showSessionProgress ? .on : .off
+        menu.addItem(progress)
         menu.addItem(.separator())
         // A local selector (not NSApplication.terminate(_:)) and no key
         // equivalent: macOS auto-decorates well-known selectors with a system
@@ -250,6 +268,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func toggleShowResetTimeAtLimit(_ sender: Any?) {
         store.showResetTimeAtLimit.toggle()
+    }
+
+    @objc private func toggleSessionProgress(_ sender: Any?) {
+        store.showSessionProgress.toggle()
     }
 
     @objc private func quitApp(_ sender: Any?) {
@@ -399,11 +421,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let baseFont = NSFont.menuBarFont(ofSize: 0)
         let font = NSFont.systemFont(ofSize: baseFont.pointSize, weight: .heavy)
 
-        if label.filled {
-            // Solid color block, black text. Drawn as a (non-template) image so
-            // we get a filled background the menubar can't give an attributed
-            // title. The dynamic fill resolves per-appearance at draw time.
-            button.image = Self.filledLabelImage(text: label.text, fill: label.color, font: font)
+        // "5h Session Progress" tick: only meaningful while a session window
+        // is active (sessionElapsedFraction is nil otherwise, which also
+        // covers the emoji/error label states).
+        let progress = store.showSessionProgress ? store.sessionElapsedFraction() : nil
+
+        if label.filled || progress != nil {
+            // Drawn as a (non-template) image so we get a filled background
+            // and/or progress marks the menubar can't give an attributed
+            // title. Dynamic colors resolve per-appearance at draw time.
+            button.image = Self.statusImage(
+                text: label.text, color: label.color, filled: label.filled,
+                font: font, progress: progress
+            )
             button.imagePosition = .imageOnly
             button.attributedTitle = NSAttributedString(string: "")
         } else {
@@ -417,10 +447,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// A solid rounded color block with black, centered text — the menubar
-    /// "pill". Sized to the text plus small padding; redrawn on demand so the
-    /// dynamic `fill` re-resolves when the system appearance changes.
-    private static func filledLabelImage(text: String, fill: NSColor, font: NSFont) -> NSImage {
+    /// The menubar label image. When `filled`, a solid rounded color block
+    /// (the "pill") with contrasting centered text; otherwise transparent with
+    /// the text in `color`. `progress` (0–1 time elapsed in the session
+    /// window, nil = hide) is the "5h Session Progress" tick: two small edge
+    /// notches at the elapsed position — the menubar-sized version of the
+    /// popover gauge's "you are here" tick. Sized to the text plus small
+    /// padding; redrawn on demand so dynamic colors re-resolve when the
+    /// system appearance changes.
+    private static func statusImage(
+        text: String, color: NSColor, filled: Bool, font: NSFont,
+        progress: Double?
+    ) -> NSImage {
         let padX: CGFloat = 5
         let padY: CGFloat = 1.5
         let radius: CGFloat = 3.5
@@ -432,12 +470,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let image = NSImage(size: NSSize(width: width, height: height), flipped: false) { rect in
             NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).setClip()
-            fill.setFill()
-            rect.fill()
+            if filled {
+                color.setFill()
+                rect.fill()
+            }
 
             // Black reads best on the green/amber/orange stops, but goes muddy
             // on the red/dark-red end — switch to white once the block is dark.
-            let textColor = Self.contrastingText(on: fill)
+            let textColor = filled ? Self.contrastingText(on: color) : color
+            // Progress marks: on a pill, the same black/white the text uses so
+            // they survive every gradient stop; on clear, the dynamic label
+            // color so they adapt to the menubar appearance.
+            let markColor = filled ? textColor : NSColor.labelColor
+
+            if let p = progress {
+                let f = CGFloat(p)
+                markColor.setFill()
+                NSRect(x: rect.width * f - 0.75, y: 0, width: 1.5, height: 4).fill()
+                NSRect(x: rect.width * f - 0.75, y: rect.height - 4, width: 1.5, height: 4).fill()
+            }
 
             let para = NSMutableParagraphStyle()
             para.alignment = .center
@@ -447,7 +498,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .paragraphStyle: para,
             ]
             let ts = (text as NSString).size(withAttributes: attrs)
-            let textRect = NSRect(x: 0, y: (rect.height - ts.height) / 2, width: rect.width, height: ts.height)
+            let textY = (rect.height - ts.height) / 2
+            let textRect = NSRect(x: 0, y: textY, width: rect.width, height: ts.height)
             (text as NSString).draw(in: textRect, withAttributes: attrs)
             return true
         }

@@ -12,8 +12,8 @@ and later** (current — the two-icon Refresh + gear footer):
 </p>
 
 On **macOS Sonoma (14) and Sequoia (15)** (these shots predate the
-calendar-aligned gauge gridlines and edge labels — they need a Sonoma/Sequoia
-machine to recapture):
+calendar-aligned gauge gridlines, edge labels, and the menubar's 5h Session
+Progress notches — they need a Sonoma/Sequoia machine to recapture):
 
 <p>
   <img width="300" alt="Claude Code Usage popover — light mode, macOS Sonoma" src="docs/Light-Sonoma.png" />
