@@ -47,6 +47,21 @@ final class UsageStore: ObservableObject {
         didSet { UserDefaults.standard.set(showResetTimeAtLimit, forKey: UsageStore.showResetTimeAtLimitKey) }
     }
     private static let showResetTimeAtLimitKey = "showResetTimeAtLimit"
+    /// "5h Session Progress": whether the menubar label draws the edge-notch
+    /// tick marking how far through the active 5-hour session window we are.
+    /// Persisted; AppDelegate repaints via objectWillChange on change.
+    /// Migrates from the retired multi-style "menubarProgressStyle" key (any
+    /// style other than "off" counts as enabled); defaults to on.
+    @Published var showSessionProgress: Bool = {
+        let defaults = UserDefaults.standard
+        if let existing = defaults.object(forKey: UsageStore.showSessionProgressKey) as? Bool { return existing }
+        if let legacy = defaults.string(forKey: UsageStore.legacyProgressStyleKey) { return legacy != "off" }
+        return true
+    }() {
+        didSet { UserDefaults.standard.set(showSessionProgress, forKey: UsageStore.showSessionProgressKey) }
+    }
+    private static let showSessionProgressKey = "showSessionProgress"
+    private static let legacyProgressStyleKey = "menubarProgressStyle"
 
     private var timer: Timer?
     /// Last time we proactively refreshed the OAuth token in response to a
@@ -290,6 +305,16 @@ final class UsageStore: ObservableObject {
         if case .error = state { return ("!", .systemRed, false) }
         return ("…", .secondaryLabelColor, false)
     }
+
+    /// 0–1 fraction of the way through the active 5-hour window; nil when no
+    /// window is active (never connected, between sessions, error states).
+    /// Drives the menubar time-progress indicator.
+    func sessionElapsedFraction(now: Date = Date()) -> Double? {
+        guard let window = fiveHour,
+              let resets = UsageFormat.parseResetsAt(window.resets_at), resets > now
+        else { return nil }
+        return UsageFormat.elapsedFraction(resetsAt: resets, windowDuration: 5 * 3600, now: now)
+    }
 }
 
 // MARK: - Formatting helpers
@@ -309,6 +334,14 @@ enum UsageFormat {
     static func parseResetsAt(_ s: String?) -> Date? {
         guard let s else { return nil }
         return isoParser.date(from: s) ?? isoParserNoFrac.date(from: s)
+    }
+
+    /// 0–1 fraction elapsed of a window that ends at `resetsAt` and spans
+    /// `windowDuration`, clamped. Shared by the popover gauges' "you are
+    /// here" tick and the menubar time-progress indicator.
+    static func elapsedFraction(resetsAt: Date, windowDuration: TimeInterval, now: Date = Date()) -> Double {
+        let start = resetsAt.addingTimeInterval(-windowDuration)
+        return min(max(now.timeIntervalSince(start) / windowDuration, 0), 1)
     }
 
     /// "2h 34m" / "57m" / "0m"
