@@ -120,8 +120,18 @@ actor UsageBreakdownService {
         now.addingTimeInterval(-8 * 86400)
     }
 
+    /// `BreakdownViewModel.onAppear` calls `availableWindows` and then
+    /// `breakdown` for the initial selection with the *same* `now`, so
+    /// memoizing on the exact instant collapses that pair into one scan
+    /// without ever serving stale data to a genuinely new interaction
+    /// (which always carries a fresh `Date()`).
+    private var lastScan: (now: Date, output: TranscriptScanner.ScanOutput)?
+
     private func ensureScan(now: Date) async -> TranscriptScanner.ScanOutput {
-        await scanner.scan(horizonStart: Self.horizonStart(now), now: now)
+        if let lastScan, lastScan.now == now { return lastScan.output }
+        let output = await scanner.scan(horizonStart: Self.horizonStart(now), now: now)
+        lastScan = (now, output)
+        return output
     }
 
     /// "Fri 2pm–7pm"-style local-time label for a past 5h window.

@@ -53,6 +53,13 @@ actor TranscriptScanner {
 
     private let root: URL
     private let appSupportDir: URL
+    /// Warm copies of the persisted scan state, loaded from disk on the first
+    /// `scan` of this process and kept current in memory afterwards — the
+    /// on-disk JSON runs to several MB, and decoding it on every scan (each
+    /// window open triggers at least one, each picker selection another) was
+    /// the bulk of the breakdown window's load time.
+    private var warmState: ScanState?
+    private var warmEventMap: [String: TranscriptEvent]?
 
     init(root: URL, appSupportDir: URL) {
         self.root = root
@@ -65,26 +72,32 @@ actor TranscriptScanner {
     /// `EventDigest` to `appSupportDir`. Returns the full deduped event set
     /// with `timestamp >= horizonStart`, plus the accumulated title cache.
     func scan(horizonStart: Date, now: Date) async -> ScanOutput {
-        var state = ScanStore.loadState(dir: appSupportDir)
-        let digest = ScanStore.loadDigest(dir: appSupportDir)
         let horizonEpoch = horizonStart.timeIntervalSince1970
 
-        var eventMap: [String: TranscriptEvent] = [:]
-        if let digest {
-            for stored in digest.events where stored.ts >= horizonEpoch {
-                let event = Self.event(from: stored)
-                eventMap[event.dedupKey] = event
+        var state: ScanState
+        var eventMap: [String: TranscriptEvent]
+        if let warmState, let warmEventMap {
+            state = warmState
+            eventMap = warmEventMap
+        } else {
+            state = ScanStore.loadState(dir: appSupportDir)
+            let digest = ScanStore.loadDigest(dir: appSupportDir)
+            eventMap = [:]
+            if let digest {
+                for stored in digest.events where stored.ts >= horizonEpoch {
+                    let event = Self.event(from: stored)
+                    eventMap[event.dedupKey] = event
+                }
             }
         }
 
+        // Persist only when this scan actually changed something — a scan
+        // that read no new bytes must not pay for re-writing multi-MB JSON.
+        var dirty = false
         var titles = state.titles
-        let fm = FileManager.default
         let files = Self.enumerateJSONLFiles(root: root)
 
-        for path in files {
-            guard let attrs = try? fm.attributesOfItem(atPath: path),
-                  let mtimeDate = attrs[.modificationDate] as? Date,
-                  let sizeNum = (attrs[.size] as? NSNumber)?.intValue else { continue }
+        for (path, mtimeDate, sizeNum) in files {
             // mtime filter: skip without opening files untouched since the horizon.
             if mtimeDate < horizonStart { continue }
             let mtime = mtimeDate.timeIntervalSince1970
@@ -107,11 +120,11 @@ actor TranscriptScanner {
                 startOffset = 0
             } else if currentSize == existingRecord.offset && mtime == existingRecord.mtime {
                 // Nothing appended since last scan.
-                state.files[path] = FileScanRecord(size: currentSize, mtime: mtime, offset: existingRecord.offset)
                 continue
             }
 
             guard let handle = FileHandle(forReadingAtPath: path) else { continue }
+            dirty = true
             handle.seek(toFileOffset: UInt64(startOffset))
             let reader = GrowableLineReader(handle: handle)
             let slug = Self.projectSlug(forPath: path, root: root)
@@ -128,15 +141,35 @@ actor TranscriptScanner {
             state.fileEvents[path] = Array(fileKeys)
         }
 
-        state.titles = titles
+        if state.titles != titles {
+            state.titles = titles
+            dirty = true
+        }
 
-        let events = eventMap.values.filter { $0.timestamp.timeIntervalSince1970 >= horizonEpoch }
-        let newDigest = EventDigest(horizonStart: horizonEpoch, events: events.map(Self.storedEvent(from:)))
+        // Drop events that have aged out of the horizon so the warm map (and
+        // the digest built from it) doesn't grow forever as time advances.
+        let stale = eventMap.filter { $0.value.timestamp.timeIntervalSince1970 < horizonEpoch }
+        for key in stale.keys { eventMap.removeValue(forKey: key) }
+        let events = Array(eventMap.values)
 
-        ScanStore.saveState(state, dir: appSupportDir)
-        ScanStore.saveDigest(newDigest, dir: appSupportDir)
+        if dirty {
+            // Trim per-file dedup-key bookkeeping to keys still in the digest
+            // — stale keys reference events already horizon-pruned, and they
+            // were the bulk of scan_state.json's size.
+            let liveKeys = Set(eventMap.keys)
+            for (path, keys) in state.fileEvents {
+                let filtered = keys.filter { liveKeys.contains($0) }
+                if filtered.count != keys.count { state.fileEvents[path] = filtered }
+            }
+            let newDigest = EventDigest(horizonStart: horizonEpoch, events: events.map(Self.storedEvent(from:)))
+            ScanStore.saveState(state, dir: appSupportDir)
+            ScanStore.saveDigest(newDigest, dir: appSupportDir)
+        }
 
-        return ScanOutput(events: Array(events), titles: titles)
+        warmState = state
+        warmEventMap = eventMap
+
+        return ScanOutput(events: events, titles: titles)
     }
 
     // MARK: - Line processing
@@ -209,14 +242,23 @@ actor TranscriptScanner {
     /// Recursively enumerates every file under `root` ending in `.jsonl`,
     /// including `<sid>/subagents/**` and `.../workflows/**` — the strict
     /// extension filter naturally excludes `workflows/scripts/*.js`.
-    private static func enumerateJSONLFiles(root: URL) -> [String] {
+    /// Returns mtime/size alongside each path: the enumerator prefetches
+    /// them during traversal, which beats a separate `attributesOfItem`
+    /// stat call per file (tens of thousands of syscalls at real-world
+    /// transcript counts).
+    private static func enumerateJSONLFiles(root: URL) -> [(path: String, mtime: Date, size: Int)] {
         let fm = FileManager.default
+        let keys: Set<URLResourceKey> = [.isRegularFileKey, .contentModificationDateKey, .fileSizeKey]
         guard let enumerator = fm.enumerator(
-            at: root, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles]
+            at: root, includingPropertiesForKeys: Array(keys), options: [.skipsHiddenFiles]
         ) else { return [] }
-        var result: [String] = []
+        var result: [(path: String, mtime: Date, size: Int)] = []
         for case let url as URL in enumerator where url.pathExtension == "jsonl" {
-            result.append(url.path)
+            guard let values = try? url.resourceValues(forKeys: keys),
+                  values.isRegularFile == true,
+                  let mtime = values.contentModificationDate,
+                  let size = values.fileSize else { continue }
+            result.append((url.path, mtime, size))
         }
         return result
     }
