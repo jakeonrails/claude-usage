@@ -43,7 +43,37 @@ final class AggregatorTests: XCTestCase {
         let result = Aggregator.aggregate(events: events, titles: [:], descriptor: window(), weights: weights, now: base)
         XCTAssertEqual(result.projects.count, 1)
         XCTAssertEqual(result.projects.first?.displayName, "myrepo")
-        XCTAssertEqual(result.projects.first?.id, "/Users/jake/source/myrepo")
+        XCTAssertEqual(result.projects.first?.id, "myrepo")
+    }
+
+    func testConductorWorkspaceCollapse() {
+        // Conductor workspaces are named after random cities; group them
+        // under the repo directory above them, merged with a plain checkout
+        // of the same repo elsewhere on disk.
+        let events = [
+            event(cwd: "/Users/jake/conductor/workspaces/sperity-web/yangon", slug: "slug1", sessionId: "s1"),
+            event(cwd: "/Users/jake/conductor/workspaces/sperity-web/brazzaville-v2", slug: "slug2", sessionId: "s2"),
+            event(cwd: "/Users/jake/source/sperity-web", slug: "slug3", sessionId: "s3"),
+            event(cwd: "/Users/jake/conductor/workspaces/other-repo/lisbon", slug: "slug4", sessionId: "s4")
+        ]
+        let result = Aggregator.aggregate(events: events, titles: [:], descriptor: window(), weights: weights, now: base)
+        XCTAssertEqual(result.projects.count, 2)
+        let sperity = try! XCTUnwrap(result.projects.first { $0.displayName == "sperity-web" })
+        XCTAssertEqual(sperity.sessions.count, 3)
+        XCTAssertTrue(result.projects.contains { $0.displayName == "other-repo" })
+    }
+
+    func testWorktreeInsideConductorWorkspaceCollapse() {
+        // A .claude worktree inside a Conductor workspace collapses through
+        // both rules down to the repo name.
+        let events = [
+            event(
+                cwd: "/Users/jake/conductor/workspaces/claude-usage/geneva/.claude/worktrees/feature-x",
+                slug: "slug1", sessionId: "s1"
+            )
+        ]
+        let result = Aggregator.aggregate(events: events, titles: [:], descriptor: window(), weights: weights, now: base)
+        XCTAssertEqual(result.projects.first?.displayName, "claude-usage")
     }
 
     func testSessionDrilldown() {
@@ -96,8 +126,8 @@ final class AggregatorTests: XCTestCase {
             event(cwd: "/b", slug: "b", sessionId: "s2", input: 0, output: 100)  // 25% share
         ]
         let result = Aggregator.aggregate(events: events, titles: [:], descriptor: window(apiUtilization: 40), weights: weights, now: base)
-        let a = try! XCTUnwrap(result.projects.first { $0.id == "/a" })
-        let b = try! XCTUnwrap(result.projects.first { $0.id == "/b" })
+        let a = try! XCTUnwrap(result.projects.first { $0.id == "a" })
+        let b = try! XCTUnwrap(result.projects.first { $0.id == "b" })
         XCTAssertEqual(a.localSharePercent, 75, accuracy: 1e-6)
         XCTAssertEqual(a.estimatedUtilizationPoints ?? -1, 30, accuracy: 1e-6)
         XCTAssertEqual(b.estimatedUtilizationPoints ?? -1, 10, accuracy: 1e-6)
@@ -122,8 +152,8 @@ final class AggregatorTests: XCTestCase {
             event(cwd: "/big", slug: "big", sessionId: "s2", output: 1000)
         ]
         let result = Aggregator.aggregate(events: events, titles: [:], descriptor: window(), weights: weights, now: base)
-        XCTAssertEqual(result.projects.first?.id, "/big")
-        XCTAssertEqual(result.projects.last?.id, "/small")
+        XCTAssertEqual(result.projects.first?.id, "big")
+        XCTAssertEqual(result.projects.last?.id, "small")
     }
 
     func testWindowRangeFilter() {
