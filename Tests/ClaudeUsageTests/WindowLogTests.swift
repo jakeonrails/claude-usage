@@ -115,6 +115,76 @@ final class WindowLogTests: XCTestCase {
         XCTAssertEqual(w.duration, WindowResolver.fiveHour, accuracy: 1)
     }
 
+    func testJitterWithinToleranceDoesNotAppend() async throws {
+        // The live API flips resets_at by ±1s between polls for the same
+        // window; that must not grow the log.
+        let base = Date(timeIntervalSince1970: 1_752_000_000)
+        let first = makeResponse(fiveHourResetOffset: 3600, sevenDayResetOffset: nil, fableResetOffset: nil, base: base)
+        let jittered = makeResponse(fiveHourResetOffset: 3601, sevenDayResetOffset: nil, fableResetOffset: nil, base: base)
+        await log.record(first, observedAt: base)
+        await log.record(jittered, observedAt: base.addingTimeInterval(300))
+        await log.record(first, observedAt: base.addingTimeInterval(600))
+
+        let entries = await log.entries()
+        XCTAssertEqual(entries.filter { $0.kind == "five_hour" }.count, 1)
+    }
+
+    func testBeyondToleranceStillAppends() async throws {
+        let base = Date(timeIntervalSince1970: 1_752_000_000)
+        let first = makeResponse(fiveHourResetOffset: 3600, sevenDayResetOffset: nil, fableResetOffset: nil, base: base)
+        let nextWindow = makeResponse(
+            fiveHourResetOffset: 3600 + WindowLog.jitterTolerance + 60,
+            sevenDayResetOffset: nil, fableResetOffset: nil, base: base
+        )
+        await log.record(first, observedAt: base)
+        await log.record(nextWindow, observedAt: base.addingTimeInterval(3600))
+
+        let entries = await log.entries()
+        XCTAssertEqual(entries.filter { $0.kind == "five_hour" }.count, 2)
+    }
+
+    private func handWrite(fiveHourResets: [Date]) throws {
+        // WindowLog decodes with `.iso8601` (no fractional seconds).
+        let plainISO = ISO8601DateFormatter()
+        let lines = fiveHourResets.map {
+            #"{"kind":"five_hour","resetsAt":"\#(plainISO.string(from: $0))","observedAt":"\#(plainISO.string(from: $0))"}"#
+        }
+        let url = tempDir.appendingPathComponent("window_log.jsonl")
+        try (lines.joined(separator: "\n") + "\n").write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    func testFiveHourWindowsCoalesceJitteredEntries() async throws {
+        // A log written before the record-side tolerance existed holds ±1s
+        // twins of the same boundary — they must come back as one window.
+        let base = Date(timeIntervalSince1970: 1_752_000_000)
+        try handWrite(fiveHourResets: [
+            base, base.addingTimeInterval(1), base, base.addingTimeInterval(1),
+            base.addingTimeInterval(6 * 3600)
+        ])
+
+        let windows = await log.fiveHourWindows()
+        XCTAssertEqual(windows.count, 2)
+    }
+
+    func testCompactionRewritesBloatedLog() async throws {
+        // 200 alternating jitter lines of one boundary; the next record()
+        // should compact the file down to a handful of lines.
+        let base = Date(timeIntervalSince1970: 1_752_000_000)
+        let jittered = (0..<200).map { base.addingTimeInterval(Double($0 % 2)) }
+        try handWrite(fiveHourResets: jittered)
+
+        let response = makeResponse(fiveHourResetOffset: 6 * 3600, sevenDayResetOffset: nil, fableResetOffset: nil, base: base)
+        await log.record(response, observedAt: base.addingTimeInterval(3600))
+
+        let entries = await log.entries()
+        XCTAssertEqual(entries.filter { $0.kind == "five_hour" }.count, 2)
+
+        let url = tempDir.appendingPathComponent("window_log.jsonl")
+        let text = try String(contentsOf: url, encoding: .utf8)
+        let lineCount = text.split(separator: "\n", omittingEmptySubsequences: true).count
+        XCTAssertEqual(lineCount, 2)
+    }
+
     func testMalformedLineSkippedOnRead() async throws {
         let base = Date(timeIntervalSince1970: 1_752_000_000)
         let response = makeResponse(fiveHourResetOffset: 3600, sevenDayResetOffset: nil, fableResetOffset: nil, base: base)
