@@ -139,8 +139,56 @@ final class UsageBreakdownServiceTests: XCTestCase {
         let first = await service.breakdown(for: current, response: response, now: base)
         XCTAssertEqual(first.scannedEventCount, 1)
 
+        // A later interaction (fresh `now`, as every real one carries) must
+        // pick up freshly appended transcript lines.
         try append(assistantLine(ts: base.addingTimeInterval(90), sid: "sid1", cwd: "/Users/jake/foo", requestId: "req2", output: 20), to: file)
-        let second = await service.breakdown(for: current, response: response, now: base)
+        let second = await service.breakdown(for: current, response: response, now: base.addingTimeInterval(1))
         XCTAssertEqual(second.scannedEventCount, 2)
+    }
+
+    func testSameInstantReusesOneScan() async throws {
+        // `availableWindows` + the immediately following `breakdown` share
+        // one `now` (that's how BreakdownViewModel.onAppear calls them), and
+        // the pair must cost a single scan — a line appended between the two
+        // calls is deliberately invisible until the next fresh interaction.
+        let file = root.appendingPathComponent("-Users-jake-foo/sid1.jsonl")
+        try write([assistantLine(ts: base.addingTimeInterval(60), sid: "sid1", cwd: "/Users/jake/foo", requestId: "req1", output: 10)], to: file)
+
+        let response = makeResponse(fiveHourEnd: base.addingTimeInterval(WindowResolver.fiveHour), sevenDayEnd: nil, fableEnd: nil)
+        let service = makeService()
+        let windows = await service.availableWindows(response: response, now: base)
+        let current = try XCTUnwrap(windows.first { $0.kind == .currentFiveHour })
+
+        try append(assistantLine(ts: base.addingTimeInterval(90), sid: "sid1", cwd: "/Users/jake/foo", requestId: "req2", output: 20), to: file)
+        let sameInstant = await service.breakdown(for: current, response: response, now: base)
+        XCTAssertEqual(sameInstant.scannedEventCount, 1)
+
+        let freshInstant = await service.breakdown(for: current, response: response, now: base.addingTimeInterval(1))
+        XCTAssertEqual(freshInstant.scannedEventCount, 2)
+    }
+
+    func testJitteredLoggedWindowsYieldOnePickerEntry() async throws {
+        // The API's resets_at jitters by ±1s between polls; a log holding
+        // both variants of one past window must not produce twin picker rows.
+        let windowLog = WindowLog(fileURL: appSupportDir.appendingPathComponent("window_log.jsonl"))
+        let pastReset = base.addingTimeInterval(-6 * 3600)
+        // WindowLog decodes with the `.iso8601` strategy, which rejects
+        // fractional seconds — hand-written lines must not use `iso(_:)`.
+        let plainISO = ISO8601DateFormatter()
+        for jitter in [0.0, 1.0, 0.0, 1.0] {
+            let line = #"{"kind":"five_hour","resetsAt":"\#(plainISO.string(from: pastReset.addingTimeInterval(jitter)))","observedAt":"\#(plainISO.string(from: pastReset))"}"#
+            let url = appSupportDir.appendingPathComponent("window_log.jsonl")
+            if FileManager.default.fileExists(atPath: url.path) {
+                try append(line, to: url)
+            } else {
+                try write([line], to: url)
+            }
+        }
+
+        let service = UsageBreakdownService(transcriptRoot: root, appSupportDir: appSupportDir, windowLog: windowLog)
+        let response = makeResponse(fiveHourEnd: base.addingTimeInterval(3600), sevenDayEnd: nil, fableEnd: nil)
+        let windows = await service.availableWindows(response: response, now: base)
+
+        XCTAssertEqual(windows.filter { $0.kind == .pastFiveHour }.count, 1)
     }
 }
