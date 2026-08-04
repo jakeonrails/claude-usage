@@ -91,7 +91,9 @@ struct SessionContribution: Identifiable, Sendable, Equatable {
     let localSharePercent: Double
 }
 
-/// One project's (canonical repo root's) contribution to a window.
+/// One project's (repo name's) contribution to a window. Grouping is by
+/// repo *name* so the same repo checked out in several places (plain clone,
+/// `.claude` worktrees, Conductor workspaces) is one row.
 struct ProjectContribution: Identifiable, Sendable, Equatable {
     let id: String
     let displayName: String
