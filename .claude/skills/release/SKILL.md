@@ -5,13 +5,16 @@ description: |
   bump the GitHub Pages version string, build the signed app with the
   release tag baked in, package the styled DMG, tag, and publish a GitHub
   Release with the DMG attached. Use when the user says "release this as
-  a new version", "cut a release", or "ship vX.Y.Z". Defers to the global
-  release-macos-app skill for generic mechanics.
+  a new version", "publish this as a new release", "cut a release", or
+  "ship vX.Y.Z". This is the entry point for releasing THIS repo; it
+  defers to the sibling release-macos-app skill (vendored in this repo's
+  .claude/skills/) for generic mechanics.
 ---
 
 # release (ClaudeUsage)
 
-Follow the global `release-macos-app` skill's stage/checkpoint discipline.
+Follow the stage/checkpoint discipline of the `release-macos-app` skill
+vendored at `.claude/skills/release-macos-app/SKILL.md` in this repo.
 This file is only what's specific to this repo.
 
 ## Preflight
@@ -97,6 +100,6 @@ hour (checker polls hourly).
 - Verify the Pages site shows the new version:
   https://jakeonrails.github.io/claude-usage/ (CDN may lag a minute).
 - If the CLI's flags/output changed this release, update
-  `.claude/skills/claude-usage/SKILL.md` (the machine-wide symlink picks
-  it up automatically).
+  `.claude/skills/claude-usage/SKILL.md` — the repo copy is canonical
+  (a machine may symlink it into ~/.claude/skills, but that's optional).
 - Delete the local DMG or keep it — it's untracked either way.

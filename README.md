@@ -290,6 +290,26 @@ the button's dialog offers — depends on how the build was made:
 Either way it's alert-only: the app never runs git, touches your checkout, or
 replaces itself.
 
+## Cutting a release (maintainers)
+
+The release workflow is self-contained in this repo as Claude Code skills
+under [`.claude/skills/`](.claude/skills/) — clone the repo and they're
+available automatically, no per-machine setup:
+
+- [`release`](.claude/skills/release/SKILL.md) — the ClaudeUsage-specific
+  runbook. In a Claude Code session in this repo, say **"release this as a
+  new version"** (or "publish this as a new release") and it walks the whole
+  flow: semver proposal from commits, Pages version bump, `RELEASE_TAG`
+  build, styled DMG, tag, GitHub Release.
+- [`release-macos-app`](.claude/skills/release-macos-app/SKILL.md) — the
+  generic macOS build→sign→DMG→release playbook the runbook layers on.
+  To reuse it for *other* projects on your machine, symlink it:
+  `ln -s "$PWD/.claude/skills/release-macos-app" ~/.claude/skills/release-macos-app`
+
+Prereqs: `brew install create-dmg`, `gh auth login`, and the `.env` signing
+setup from [Build](#build) (releases must be signed with the stable
+"Claude Usage" identity — never ad-hoc).
+
 ## Uninstall
 
 ```bash
