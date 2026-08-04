@@ -77,11 +77,9 @@ struct BreakdownView: View {
                 }
             }
         } label: {
-            HStack {
-                Text(vm.selected.map { $0.isExact ? $0.title : "~\($0.title)" } ?? "Select timescale")
-                Image(systemName: "chevron.down")
-                    .font(.caption2)
-            }
+            // No manual chevron here — the native pull-down control already
+            // draws its own indicator, and a second one reads as a glitch.
+            Text(vm.selected.map { $0.isExact ? $0.title : "~\($0.title)" } ?? "Select timescale")
         }
         .disabled(vm.windows.isEmpty)
         .fixedSize()
