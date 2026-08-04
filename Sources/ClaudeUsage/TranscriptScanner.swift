@@ -95,6 +95,24 @@ actor TranscriptScanner {
         // that read no new bytes must not pay for re-writing multi-MB JSON.
         var dirty = false
         var titles = state.titles
+
+        // One-time repair: caches written before `isInjectedText` existed
+        // hold tag-wrapped fallback titles (Conductor's <system_instruction>
+        // preamble, <command-message> blocks). Drop them and rewind the
+        // matching session file's offset so the rescan below can reseed the
+        // title from the first real prompt. Converges: repaired titles are
+        // gone from the cache, so this never fires twice for a session.
+        for (sid, title) in state.titles
+        where title.source == "userMessage" && Self.isInjectedText(title.title.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            titles[sid] = nil
+            let filename = "\(sid).jsonl"
+            for path in state.files.keys where (path as NSString).lastPathComponent == filename {
+                state.files[path] = nil
+                state.fileEvents[path] = nil
+            }
+            dirty = true
+        }
+
         let files = Self.enumerateJSONLFiles(root: root)
 
         for (path, mtimeDate, sizeNum) in files {
@@ -222,10 +240,12 @@ actor TranscriptScanner {
         case "user":
             guard raw.isSidechain != true, let sessionId = raw.sessionId else { return }
             // Never overwrite an existing title (aiTitle wins outright; and
-            // only the *first* user message should ever seed a fallback).
+            // only the *first real* user message should ever seed a fallback).
             guard titles[sessionId] == nil else { return }
-            guard let text = raw.message?.content?.firstText, !text.isEmpty else { return }
-            titles[sessionId] = ScanState.SessionTitle(title: Self.truncate(text, 80), source: "userMessage")
+            guard let text = raw.message?.content?.firstText else { return }
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, !Self.isInjectedText(trimmed) else { return }
+            titles[sessionId] = ScanState.SessionTitle(title: Self.truncate(trimmed, 80), source: "userMessage")
 
         default:
             return
@@ -233,6 +253,17 @@ actor TranscriptScanner {
     }
 
     // MARK: - Helpers
+
+    /// True for user-message text that was injected by tooling rather than
+    /// typed by the user: Conductor's `<system_instruction>` preamble,
+    /// `<task-notification>`/`<command-message>` blocks, attachment notices,
+    /// and Claude Code's "Caveat:" local-command preamble. These made
+    /// useless fallback session titles ("<system_instruction>…"). A genuine
+    /// prompt that happens to open with `<` is skipped too — a later real
+    /// message then seeds the title, which beats titling by tag soup.
+    static func isInjectedText(_ trimmed: String) -> Bool {
+        trimmed.hasPrefix("<") || trimmed.hasPrefix("Caveat:")
+    }
 
     private static func truncate(_ s: String, _ limit: Int) -> String {
         guard s.count > limit else { return s }
