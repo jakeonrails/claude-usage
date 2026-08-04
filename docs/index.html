@@ -1,0 +1,393 @@
+<title>ClaudeUsage — menubar quota gauge for Claude</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="description" content="A tiny macOS menubar app that shows your Claude plan usage — 5-hour session and weekly windows — color-coded, straight from Anthropic's own API." />
+<style>
+  :root {
+    --bg: #f6f5f3;
+    --bg-elevated: #ffffff;
+    --text: #1c1c1e;
+    --text-muted: #5b5b60;
+    --border: #e2e0db;
+    --accent: #d97b29;
+    --accent-text: #ffffff;
+    --code-bg: #eeece6;
+    --code-text: #2a2a2c;
+    --callout-bg: #fbf3e7;
+    --callout-border: #e8cd9c;
+    --shadow: 0 1px 2px rgba(20, 20, 20, 0.04), 0 8px 24px rgba(20, 20, 20, 0.06);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17171a;
+      --bg-elevated: #202024;
+      --text: #eeeeef;
+      --text-muted: #9a9a9f;
+      --border: #313136;
+      --accent: #e08a3c;
+      --accent-text: #17171a;
+      --code-bg: #26262b;
+      --code-text: #e6e6e8;
+      --callout-bg: #2a2318;
+      --callout-border: #4a3a1e;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  a { color: var(--accent); }
+
+  code, pre {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  pre {
+    background: var(--code-bg);
+    color: var(--code-text);
+    padding: 14px 16px;
+    border-radius: 10px;
+    overflow-x: auto;
+    font-size: 0.86rem;
+    line-height: 1.5;
+    border: 1px solid var(--border);
+  }
+
+  code {
+    background: var(--code-bg);
+    color: var(--code-text);
+    padding: 0.15em 0.4em;
+    border-radius: 5px;
+    font-size: 0.88em;
+  }
+
+  pre code {
+    background: none;
+    padding: 0;
+    border-radius: 0;
+  }
+
+  h1, h2, h3 { font-weight: 650; letter-spacing: -0.01em; }
+
+  /* ---------- Hero ---------- */
+
+  .hero {
+    padding: 64px 0 48px;
+  }
+
+  .hero-top {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 36px;
+  }
+
+  .hero-eyebrow {
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+
+  .hero h1 {
+    font-size: 2.4rem;
+    margin: 0;
+  }
+
+  .hero p.pitch {
+    font-size: 1.15rem;
+    color: var(--text-muted);
+    margin: 4px 0 0;
+    max-width: 46ch;
+  }
+
+  .hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 300px) 1fr;
+    gap: 40px;
+    align-items: start;
+  }
+
+  .hero-cta { padding-top: 24px; }
+
+  .hero-shot {
+    display: block;
+    width: 100%;
+    max-width: 300px;
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border);
+  }
+
+  .hero-shot img {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    border-radius: 13px;
+  }
+
+  .hero-shot img.dark { display: none; }
+
+  @media (prefers-color-scheme: dark) {
+    .hero-shot img.light { display: none; }
+    .hero-shot img.dark { display: block; }
+  }
+
+  .hero-cta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .btn-download {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--accent);
+    color: var(--accent-text);
+    font-weight: 600;
+    font-size: 1.02rem;
+    padding: 13px 22px;
+    border-radius: 10px;
+    text-decoration: none;
+    box-shadow: var(--shadow);
+  }
+
+  .btn-download:hover { filter: brightness(1.05); }
+
+  .btn-download svg { flex: none; }
+
+  #latest-version {
+    color: var(--text-muted);
+    font-size: 0.86rem;
+  }
+
+  .hero-secondary-links {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+  }
+
+  .hero-secondary-links a { color: var(--text-muted); text-decoration: underline; text-underline-offset: 2px; }
+  .hero-secondary-links a:hover { color: var(--accent); }
+
+  @media (max-width: 640px) {
+    .hero { padding: 40px 0 32px; }
+    .hero h1 { font-size: 1.9rem; }
+    .hero-grid { grid-template-columns: 1fr; gap: 28px; }
+    .hero-shot { max-width: 260px; margin: 0 auto; }
+    .hero-cta { align-items: stretch; }
+    .btn-download { justify-content: center; }
+  }
+
+  /* ---------- Sections ---------- */
+
+  section {
+    padding: 40px 0;
+    border-top: 1px solid var(--border);
+  }
+
+  section h2 {
+    font-size: 1.35rem;
+    margin: 0 0 18px;
+  }
+
+  ul.features {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 14px;
+  }
+
+  ul.features li {
+    display: flex;
+    gap: 12px;
+    align-items: baseline;
+  }
+
+  ul.features li::before {
+    content: "";
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    margin-top: 8px;
+  }
+
+  ul.features strong { font-weight: 600; }
+  ul.features span.detail { color: var(--text-muted); }
+
+  ol.steps {
+    margin: 0;
+    padding-left: 1.3em;
+    display: grid;
+    gap: 8px;
+  }
+
+  ol.steps li::marker { color: var(--text-muted); font-weight: 600; }
+
+  .callout {
+    margin-top: 24px;
+    background: var(--callout-bg);
+    border: 1px solid var(--callout-border);
+    border-radius: 12px;
+    padding: 20px 22px;
+  }
+
+  .callout h3 {
+    margin: 0 0 8px;
+    font-size: 1.02rem;
+  }
+
+  .callout p { margin: 8px 0; color: var(--text); }
+  .callout ol.steps { margin-top: 10px; }
+
+  .callout .why {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--callout-border);
+    font-size: 0.92rem;
+    color: var(--text-muted);
+  }
+
+  p.lede {
+    color: var(--text-muted);
+    margin: 0 0 16px;
+  }
+
+  footer {
+    padding: 40px 0 64px;
+    border-top: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    align-items: center;
+  }
+
+  footer a { color: var(--text-muted); text-decoration: underline; text-underline-offset: 2px; }
+  footer a:hover { color: var(--accent); }
+
+  footer .dot { opacity: 0.5; }
+</style>
+
+<div class="wrap">
+
+  <header class="hero">
+    <div class="hero-top">
+      <span class="hero-eyebrow">macOS menubar utility</span>
+      <h1>ClaudeUsage</h1>
+      <p class="pitch">See how much of your Claude plan you've used, at a glance, without opening a browser tab.</p>
+    </div>
+
+    <div class="hero-grid">
+      <div class="hero-shot" role="img" aria-label="ClaudeUsage popover showing 5-hour session and weekly usage bars">
+        <img class="light" src="Light.png" alt="ClaudeUsage popover in light mode: 71% used in the current 5-hour session, 28% weekly, with color-coded progress bars" />
+        <img class="dark" src="Dark.png" alt="ClaudeUsage popover in dark mode: 71% used in the current 5-hour session, 28% weekly, with color-coded progress bars" />
+      </div>
+
+      <div class="hero-cta">
+        <a class="btn-download" href="https://github.com/jakeonrails/claude-usage/releases/latest">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+          Download for macOS
+        </a>
+        <span id="latest-version">Latest: v1.0.0</span>
+        <p class="hero-secondary-links">
+          Requires macOS 14 (Sonoma) or later.
+          Prefer to build it yourself? See <a href="#build-from-source">building from source</a>.
+        </p>
+      </div>
+    </div>
+  </header>
+
+  <section id="what-it-does">
+    <h2>What it does</h2>
+    <ul class="features">
+      <li><span><strong>Color-coded menubar percentage.</strong> <span class="detail">A gradient from green to dark red keyed to how much of your current 5-hour session you've used — readable at a glance without clicking anything.</span></span></li>
+      <li><span><strong>5-hour session and weekly windows.</strong> <span class="detail">Straight from Anthropic's usage API — server-enforced numbers, not a local estimate. Each bar shows a reset countdown and gridlines aligned to real clock/calendar boundaries.</span></span></li>
+      <li><span><strong>Per-model weekly breakdowns.</strong> <span class="detail">Opus, Sonnet, and other scoped models get their own weekly bar where your plan exposes them.</span></span></li>
+      <li><span><strong>Usage-attribution breakdown window.</strong> <span class="detail">See which projects or sessions are driving your usage, not just the total.</span></span></li>
+      <li><span><strong>Headless <code>--json</code> CLI.</strong> <span class="detail">Script against your own usage — gate a long-running task on remaining quota, or wire it into an agent's own budget check.</span></span></li>
+    </ul>
+  </section>
+
+  <section id="install">
+    <h2>Install</h2>
+    <ol class="steps">
+      <li>Download the DMG above.</li>
+      <li>Open it, then drag <strong>ClaudeUsage</strong> into <strong>Applications</strong>.</li>
+    </ol>
+
+    <div class="callout">
+      <h3>First launch on macOS</h3>
+      <p>ClaudeUsage is self-signed rather than notarized under a paid Apple Developer ID, so macOS Gatekeeper will block the first open with an "unidentified developer" warning.</p>
+      <ol class="steps">
+        <li>Try to open the app — macOS will refuse and show a warning dialog.</li>
+        <li>Open <strong>System Settings → Privacy &amp; Security</strong>.</li>
+        <li>Scroll down to the message about ClaudeUsage being blocked, and click <strong>Open Anyway</strong>.</li>
+      </ol>
+      <p>Or skip the dialog entirely with one command in Terminal:</p>
+      <pre><code>xattr -d com.apple.quarantine /Applications/ClaudeUsage.app</code></pre>
+      <p class="why"><strong>Why:</strong> this is an open-source app signed with a local, self-issued certificate rather than a $99/yr Apple Developer ID. The tradeoff buys you a free, transparent build in exchange for one extra click on first launch.</p>
+    </div>
+  </section>
+
+  <section id="connect">
+    <h2>Connect your account</h2>
+    <p class="lede">On first launch, the popover shows a <strong>Connect your Claude account</strong> screen instead of usage data.</p>
+    <ol class="steps">
+      <li>Click <strong>Open Anthropic sign-in</strong> — your browser opens Claude's OAuth consent page.</li>
+      <li>Approve. You'll land on a page showing an authorization code.</li>
+      <li>Copy the code, paste it into the app, and click <strong>Connect</strong>.</li>
+    </ol>
+    <p class="lede" style="margin-top: 16px;">Tokens are stored in your local macOS Keychain and never leave your machine except in requests to Anthropic's own API — the app talks to nothing else.</p>
+  </section>
+
+  <section id="build-from-source">
+    <h2>Build from source</h2>
+    <p class="lede">For developers who'd rather build than trust a downloaded binary — it's a small Swift package with no external dependencies.</p>
+    <pre><code>git clone https://github.com/jakeonrails/claude-usage.git
+cd claude-usage
+./install.sh</code></pre>
+    <p class="lede" style="margin-top: 14px;">See the <a href="https://github.com/jakeonrails/claude-usage#readme">README</a> for code-signing setup, the LaunchAgent install, and update instructions.</p>
+  </section>
+
+  <section id="cli">
+    <h2>CLI</h2>
+    <p class="lede">A headless <code>--json</code> mode prints a usage snapshot and exits — useful for scripts and for gating agent work on remaining quota.</p>
+    <pre><code>/Applications/ClaudeUsage.app/Contents/MacOS/ClaudeUsage --json</code></pre>
+    <p class="lede">It's cache-first, so polling it costs no extra API traffic while the app is running. See the <a href="https://github.com/jakeonrails/claude-usage#json-output-for-scripts---json">README</a> for the full JSON schema and exit codes.</p>
+  </section>
+
+  <footer>
+    <a href="https://github.com/jakeonrails/claude-usage">GitHub repo</a>
+    <span class="dot">·</span>
+    <a href="https://github.com/jakeonrails/claude-usage/issues">Issues</a>
+    <span class="dot">·</span>
+    <a href="https://github.com/jakeonrails/claude-usage#readme">README</a>
+  </footer>
+
+</div>

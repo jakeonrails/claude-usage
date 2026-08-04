@@ -3,6 +3,15 @@
 A tiny macOS menubar app that shows how much Claude Code session quota you have
 left, color-coded.
 
+**[Download the latest release](https://github.com/jakeonrails/claude-usage/releases/latest)**
+(DMG — drag into Applications), or see the
+[project page](https://jakeonrails.github.io/claude-usage/). The app is
+self-signed, so the first launch needs a one-time approval: open the app, then
+System Settings → Privacy & Security → **Open Anyway** (or clear quarantine
+yourself with `xattr -cr /Applications/ClaudeUsage.app`). To have it start at
+login, add it under System Settings → General → Login Items. Prefer building
+from source? See [Build](#build) below.
+
 The popover adapts to your macOS version's window styling. On **macOS Tahoe (26)
 and later** (current as of 2026-08-03 — two-icon Refresh + gear footer, 5h
 Session Progress notches on the menubar pill):
@@ -259,24 +268,27 @@ it temporarily).
 
 ## Updating
 
-There are no prebuilt binaries to download — every install is built and signed
-locally against your own cert (that's what keeps the Keychain ACL stable). So
-updating means pulling the latest source and rebuilding:
+The app checks for updates once an hour and shows a blue **update** button (↓)
+next to *Refresh* in the popover when one is waiting. What it checks — and what
+the button's dialog offers — depends on how the build was made:
 
-```bash
-git pull --ff-only && ./install.sh
-```
+- **Release builds** (installed from a DMG): `build-app.sh` bakes the release
+  tag into the bundle, and the app polls the repo's latest GitHub Release.
+  When a newer version is published, the dialog offers a **Download** button
+  for the new DMG — quit the app, drag the new copy into Applications, relaunch.
+- **Source builds** (installed via `./install.sh`): the baked git commit is
+  compared against `main`. When `main` is ahead, the dialog gives the update
+  one-liner with a **Copy Command** button:
 
-Run that from your local `claude-usage` checkout (the folder you cloned and
-built from). It pulls the newest commit on `main`, rebuilds, and reinstalls.
+  ```bash
+  git pull --ff-only && ./install.sh
+  ```
 
-The app tells you when an update is waiting: `build-app.sh` bakes the build's
-commit into the bundle, and the app checks `jakeonrails/claude-usage`'s `main`
-every 5 minutes. When `main` is ahead, a blue **update** button (↓) appears next
-to *Refresh* in the popover — click it for a dialog with the one-liner above and
-a **Copy Command** button. It's alert-only: the app never runs git or touches
-your checkout, so it doesn't care where you keep the repo. (Dev builds from a
-feature branch don't trigger it — only a clean `main` ancestor does.)
+  Run that from your local `claude-usage` checkout. (Dev builds from a feature
+  branch don't trigger it — only a clean `main` ancestor does.)
+
+Either way it's alert-only: the app never runs git, touches your checkout, or
+replaces itself.
 
 ## Uninstall
 

@@ -7,6 +7,14 @@ ClaudeUsage.app/
 .DS_Store
 .env
 
+# Release artifacts (DMGs are published to GitHub Releases, not committed)
+ClaudeUsage-v*.dmg
+rw.*.dmg
+
+# Local Claude Code state (skills in .claude/skills ARE tracked)
+.claude/settings.local.json
+.claude/worktrees/
+
 # Stray compiler outputs
 *.d
 *.o
