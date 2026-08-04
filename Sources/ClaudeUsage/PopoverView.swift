@@ -277,10 +277,9 @@ struct PopoverView: View {
             if let update = updateChecker.available {
                 Divider()
                 Button {
-                    showUpdateInstructions(aheadBy: update.aheadBy)
+                    showUpdateAlert(for: update)
                 } label: {
-                    let commits = "\(update.aheadBy) commit\(update.aheadBy == 1 ? "" : "s")"
-                    Label("Update available (\(commits) behind)…", systemImage: "arrow.down.circle.fill")
+                    Label(update.menuTitle, systemImage: "arrow.down.circle.fill")
                 }
             }
             Divider()
@@ -307,7 +306,16 @@ struct PopoverView: View {
         .help("Settings and actions")
     }
 
-    private func showUpdateInstructions(aheadBy: Int) {
+    private func showUpdateAlert(for update: UpdateChecker.Available) {
+        switch update {
+        case .source(let aheadBy):
+            showSourceUpdateInstructions(aheadBy: aheadBy)
+        case .release(let tag, let currentTag, let downloadURL):
+            showReleaseUpdateInstructions(tag: tag, currentTag: currentTag, downloadURL: downloadURL)
+        }
+    }
+
+    private func showSourceUpdateInstructions(aheadBy: Int) {
         let commits = "\(aheadBy) commit\(aheadBy == 1 ? "" : "s")"
         let cmd = UpdateChecker.updateCommand
         let alert = NSAlert()
@@ -328,6 +336,19 @@ struct PopoverView: View {
         if alert.runModal() == .alertFirstButtonReturn {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(cmd, forType: .string)
+        }
+    }
+
+    private func showReleaseUpdateInstructions(tag: String, currentTag: String, downloadURL: URL) {
+        let alert = NSAlert()
+        alert.messageText = "Update available"
+        alert.informativeText = "ClaudeUsage \(tag) is available (you have \(currentTag))."
+        alert.addButton(withTitle: "Download")
+        alert.addButton(withTitle: "Later")
+        // Accessory apps aren't active, so the modal would open unfocused/behind.
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertFirstButtonReturn {
+            NSWorkspace.shared.open(downloadURL)
         }
     }
 

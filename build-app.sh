@@ -22,6 +22,26 @@ if [[ -f .env ]]; then
   set -a; . ./.env; set +a
 fi
 
+# Optional tagged-release build. When RELEASE_TAG is set (format vX.Y.Z), we
+# bake CFBundleShortVersionString from it and a ReleaseTag key so the running
+# app's UpdateChecker switches to the release channel (polls GitHub's
+# releases/latest instead of comparing commits against main). Unset by
+# default — a plain `./build-app.sh` still produces a source-channel build.
+RELEASE_TAG="${RELEASE_TAG:-}"
+if [[ -n "${RELEASE_TAG}" ]]; then
+  if [[ ! "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "ERROR: RELEASE_TAG must match vX.Y.Z (got '${RELEASE_TAG}')" >&2
+    exit 1
+  fi
+  VERSION_STRING="${RELEASE_TAG#v}"
+  RELEASE_TAG_PLIST_ENTRY="  <key>ReleaseTag</key>
+  <string>${RELEASE_TAG}</string>
+"
+else
+  VERSION_STRING="0.1.0"
+  RELEASE_TAG_PLIST_ENTRY=""
+fi
+
 echo "==> swift build -c ${CONFIG}"
 swift build -c "${CONFIG}"
 
@@ -54,12 +74,12 @@ cat >"${APP_DIR}/Contents/Info.plist" <<PLIST
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.1.0</string>
+  <string>${VERSION_STRING}</string>
   <key>CFBundleVersion</key>
   <string>1</string>
   <key>GitCommit</key>
   <string>${GIT_COMMIT}</string>
-  <key>LSMinimumSystemVersion</key>
+${RELEASE_TAG_PLIST_ENTRY}  <key>LSMinimumSystemVersion</key>
   <string>13.0</string>
   <key>LSUIElement</key>
   <true/>
