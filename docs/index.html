@@ -277,6 +277,40 @@
     margin: 0 0 16px;
   }
 
+  .people {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 36px 56px;
+  }
+
+  a.person {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    text-decoration: none;
+    color: var(--text);
+  }
+
+  a.person img {
+    width: 130px;
+    height: 130px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    margin-bottom: 8px;
+  }
+
+  a.person .person-name { font-weight: 600; }
+
+  a.person .person-handle {
+    font-size: 0.88rem;
+    color: var(--text-muted);
+  }
+
+  a.person:hover .person-handle { color: var(--accent); }
+
   footer {
     padding: 40px 0 64px;
     border-top: 1px solid var(--border);
@@ -380,6 +414,22 @@ cd claude-usage
     <p class="lede">A headless <code>--json</code> mode prints a usage snapshot and exits — useful for scripts and for gating agent work on remaining quota.</p>
     <pre><code>/Applications/ClaudeUsage.app/Contents/MacOS/ClaudeUsage --json</code></pre>
     <p class="lede">It's cache-first, so polling it costs no extra API traffic while the app is running. See the <a href="https://github.com/jakeonrails/claude-usage#json-output-for-scripts---json">README</a> for the full JSON schema and exit codes.</p>
+  </section>
+
+  <section id="built-by">
+    <h2>Built by</h2>
+    <div class="people">
+      <a class="person" href="https://github.com/jakeonrails">
+        <img src="moffatt-avatar.jpg" alt="Photo of Jake Moffatt" width="130" height="130" loading="lazy" />
+        <span class="person-name">Jake Moffatt</span>
+        <span class="person-handle">@jakeonrails</span>
+      </a>
+      <a class="person" href="https://github.com/python2121">
+        <img src="nowicki-avatar.jpg" alt="Photo of Andrew Nowicki" width="130" height="130" loading="lazy" />
+        <span class="person-name">Andrew Nowicki</span>
+        <span class="person-handle">@python2121</span>
+      </a>
+    </div>
   </section>
 
   <footer>

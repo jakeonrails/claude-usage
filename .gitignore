@@ -11,6 +11,10 @@ ClaudeUsage.app/
 ClaudeUsage-v*.dmg
 rw.*.dmg
 
+# Original uncropped contributor photos (only the *-avatar.jpg crops are published)
+docs/moffatt.jpg
+docs/nowicki.jpeg
+
 # Local Claude Code state (skills in .claude/skills ARE tracked)
 .claude/settings.local.json
 .claude/worktrees/
