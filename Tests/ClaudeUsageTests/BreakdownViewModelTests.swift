@@ -1,3 +1,4 @@
+#if os(macOS)
 import XCTest
 @testable import ClaudeUsage
 
@@ -139,3 +140,4 @@ final class BreakdownViewModelTests: XCTestCase {
         XCTAssertFalse(vm.expandedProjectIDs.contains("proj-1"))
     }
 }
+#endif

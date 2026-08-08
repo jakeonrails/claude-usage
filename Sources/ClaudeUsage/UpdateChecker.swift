@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import SwiftUI
 
@@ -221,3 +222,4 @@ extension UpdateChecker.Available {
         }
     }
 }
+#endif

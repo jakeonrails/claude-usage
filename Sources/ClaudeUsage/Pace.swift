@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 
 /// Heuristic: one fully-used 5-hour session ≈ 7% of the weekly Max-plan cap.
@@ -93,3 +94,4 @@ enum PaceCalculator {
         )
     }
 }
+#endif

@@ -1,7 +1,9 @@
 # Claude Code Usage (menubar)
 
 A tiny macOS menubar app that shows how much Claude Code session quota you have
-left, color-coded.
+left, color-coded. Also runs on Linux: the same package builds a headless
+`claude-usage` CLI plus a KDE Plasma panel widget — see
+[Linux (KDE Plasma)](#linux-kde-plasma).
 
 **[Download the latest release](https://github.com/jakeonrails/claude-usage/releases/latest)**
 (DMG — drag into Applications), or see the
@@ -265,6 +267,54 @@ thereafter.
 The LaunchAgent shows up in **System Settings → General → Login Items →
 Allow in the Background** (toggleable from the UI if you want to disable
 it temporarily).
+
+## Linux (KDE Plasma)
+
+The same Swift package builds on Linux (the AppKit/SwiftUI layer is
+platform-gated out). What you get:
+
+- **`claude-usage`** — the same headless CLI as the mac app's `--json` mode
+  (identical schema and exit codes, see
+  [JSON output for scripts](#json-output-for-scripts---json)), plus
+  `claude-usage connect` / `disconnect` for the OAuth lifecycle in the
+  terminal.
+- **A Plasma 6 panel widget** (`linux/plasmoid/`) that polls the CLI and shows
+  the color-coded session percentage in your panel, with a popup breaking down
+  the 5-hour, weekly, and per-model windows — the KDE analogue of the macOS
+  popover.
+
+```bash
+linux/install.sh          # downloads a repo-local Swift toolchain to
+                          # .toolchain/ on first run (~1.5 GB), builds, and
+                          # symlinks ~/.local/bin/claude-usage + the widget
+claude-usage connect      # OAuth login: opens browser, paste the code back
+```
+
+Then right-click your panel → **Add Widgets** → search "Claude Usage" (restart
+plasmashell first if it doesn't appear:
+`systemctl --user restart plasma-plasmashell.service`).
+
+Notes:
+
+- The build is fully static (musl, via Swift's Static Linux SDK): the binary
+  runs on any x86_64 distro — including building inside a distrobox/container
+  on an immutable OS like SteamOS and running on the host.
+- **Stock SteamOS (and other stripped/immutable hosts) can't compile** — no
+  C headers on the host. Build inside a container (the script detects this and
+  prints the distrobox one-liner); `linux/install.sh` run in the container
+  still installs correctly because your home directory is shared, and the
+  widget/host only ever runs the static binary.
+- Everything the build needs lives in the repo folder (`.toolchain/`,
+  gitignored). The two things outside it: the install symlinks above, and your
+  OAuth tokens at `~/.config/claude-usage/credentials.json` (`0600`, same
+  pattern as `gh`/`aws` — Linux has no universal keychain, and KWallet/Secret
+  Service aren't guaranteed outside a full desktop session).
+- The widget needs no background service: plasmashell runs the cache-first CLI
+  on its poll interval (configurable, default 300 s).
+- `linux/install.sh --uninstall` removes both symlinks; delete the widget from
+  the panel via right-click → Remove.
+- `swift test` runs the portable suite on Linux (the macOS-UI tests are gated
+  out).
 
 ## Updating
 

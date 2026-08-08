@@ -1,3 +1,4 @@
+#if os(macOS)
 import XCTest
 import AppKit
 import SwiftUI
@@ -632,3 +633,4 @@ final class PaceCalculatorTests: XCTestCase {
         XCTAssertTrue(isTooEarly(result.verdict), "Expected .tooEarly verdict")
     }
 }
+#endif

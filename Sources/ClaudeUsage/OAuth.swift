@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// Talks to the Anthropic OAuth token endpoint to refresh access tokens
 /// and run the authorization-code grant for our own first-party login.

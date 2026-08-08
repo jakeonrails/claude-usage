@@ -1,3 +1,4 @@
+#if os(macOS)
 import XCTest
 @testable import ClaudeUsage
 
@@ -321,3 +322,4 @@ final class UpdateCheckerTests: XCTestCase {
                                                             downloadURL: URL(string: "https://example.com")!))
     }
 }
+#endif

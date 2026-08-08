@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 
 struct PopoverView: View {
@@ -463,3 +464,4 @@ struct PopoverView: View {
         return String(format: "%d:%02d%@", twelve, minute, suffix)
     }
 }
+#endif

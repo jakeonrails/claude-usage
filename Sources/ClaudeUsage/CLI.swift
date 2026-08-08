@@ -25,7 +25,11 @@ enum CLI {
     enum CLIError: Error, LocalizedError {
         case notConnected
         var errorDescription: String? {
+            #if os(macOS)
             "Not connected. Open the ClaudeUsage menubar app and connect your Claude account."
+            #else
+            "Not connected. Run `claude-usage connect` to connect your Claude account."
+            #endif
         }
     }
 

@@ -1,3 +1,4 @@
+#if os(macOS)
 import XCTest
 @testable import ClaudeUsage
 
@@ -120,3 +121,4 @@ final class GridMarkTests: XCTestCase {
         XCTAssertNil(PopoverView.hourMarks(resetsAt: "garbage", windowDuration: fiveHours, calendar: utc))
     }
 }
+#endif

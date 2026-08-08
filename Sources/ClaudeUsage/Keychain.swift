@@ -1,12 +1,16 @@
 import Foundation
+#if os(macOS)
 import Security
+#endif
 
 enum KeychainError: Error, LocalizedError {
     case itemNotFound
     case unexpectedData
-    case osStatus(OSStatus)
     case missingRefreshToken
+    #if os(macOS)
+    case osStatus(OSStatus)
     case securityCLIFailed(exit: Int32, stderr: String)
+    #endif
 
     var errorDescription: String? {
         switch self {
@@ -14,15 +18,17 @@ enum KeychainError: Error, LocalizedError {
             return "Claude Code credentials not found in Keychain. Sign in to Claude Code first."
         case .unexpectedData:
             return "Keychain item is not valid JSON."
+        case .missingRefreshToken:
+            return "Keychain item missing claudeAiOauth.refreshToken — sign in to Claude Code again."
+        #if os(macOS)
         case .osStatus(let s):
             if let msg = SecCopyErrorMessageString(s, nil) as String? { return "Keychain error: \(msg)" }
             return "Keychain error: \(s)"
-        case .missingRefreshToken:
-            return "Keychain item missing claudeAiOauth.refreshToken — sign in to Claude Code again."
         case .securityCLIFailed(let exit, let stderr):
             let trimmed = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.contains("could not be found") { return KeychainError.itemNotFound.errorDescription ?? "" }
             return "security CLI failed (exit \(exit)): \(trimmed.isEmpty ? "no stderr" : trimmed)"
+        #endif
         }
     }
 }
@@ -47,6 +53,35 @@ struct ClaudeCredentials {
     }
 }
 
+// The `claudeAiOauth.{accessToken,refreshToken,expiresAt}` JSON shape both
+// AppCredentials backends (macOS keychain item, Linux credentials file) store.
+extension ClaudeCredentials {
+    init?(fromCredentialsJSON data: Data) {
+        guard let any = try? JSONSerialization.jsonObject(with: data, options: []),
+              let dict = any as? [String: Any],
+              let oauth = dict["claudeAiOauth"] as? [String: Any],
+              let access = oauth["accessToken"] as? String else {
+            return nil
+        }
+        let refresh = oauth["refreshToken"] as? String
+        // expiresAt may be Int, Int64, or NSNumber depending on how it was written.
+        let expiresAtMs: Int64?
+        if let n = oauth["expiresAt"] as? NSNumber { expiresAtMs = n.int64Value }
+        else if let i = oauth["expiresAt"] as? Int64 { expiresAtMs = i }
+        else if let i = oauth["expiresAt"] as? Int { expiresAtMs = Int64(i) }
+        else { expiresAtMs = nil }
+        self.init(accessToken: access, refreshToken: refresh, expiresAtMs: expiresAtMs)
+    }
+
+    static func credentialsJSON(accessToken: String, refreshToken: String?, expiresAtMs: Int64?) throws -> Data {
+        var oauth: [String: Any] = ["accessToken": accessToken]
+        if let rt = refreshToken { oauth["refreshToken"] = rt }
+        if let exp = expiresAtMs { oauth["expiresAt"] = NSNumber(value: exp) }
+        return try JSONSerialization.data(withJSONObject: ["claudeAiOauth": oauth], options: [])
+    }
+}
+
+#if os(macOS)
 enum Keychain {
     static let service = "Claude Code-credentials"
 
@@ -149,3 +184,4 @@ enum Keychain {
         return data
     }
 }
+#endif

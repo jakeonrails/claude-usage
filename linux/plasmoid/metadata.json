@@ -1,0 +1,19 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Id": "org.claudeusage.panel",
+        "Name": "Claude Usage",
+        "Description": "Claude plan usage (5-hour session and weekly windows) in your panel",
+        "Icon": "office-chart-bar",
+        "Category": "System Information",
+        "Authors": [
+            {
+                "Name": "ClaudeUsage contributors"
+            }
+        ],
+        "Version": "1.0",
+        "Website": "https://github.com/jakeonrails/claude-usage",
+        "License": "MIT"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

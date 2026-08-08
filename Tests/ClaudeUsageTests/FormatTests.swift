@@ -1,5 +1,7 @@
 import XCTest
+#if os(macOS)
 import AppKit
+#endif
 @testable import ClaudeUsage
 
 final class FormatTests: XCTestCase {
@@ -198,6 +200,7 @@ final class FormatTests: XCTestCase {
         XCTAssertEqual(UsageFormat.percentString(75.6), "76%")
     }
 
+    #if os(macOS)
     // MARK: - contrastingText (indirect via UsageColor + known RGB)
     //
     // AppDelegate.contrastingText(on:) is private — it cannot be called
@@ -274,4 +277,5 @@ final class FormatTests: XCTestCase {
         let luma = 0.299 * rgb.redComponent + 0.587 * rgb.greenComponent + 0.114 * rgb.blueComponent
         XCTAssertLessThan(luma, 0.55, "Pure blue has luma 0.114 < 0.55 → white text")
     }
+    #endif
 }

@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 
 /// "What ate my tokens?" — per-project/session usage breakdown for a
@@ -251,3 +252,4 @@ struct BreakdownView: View {
         return "\(formatter.string(from: range.start)) – \(formatter.string(from: range.end))"
     }
 }
+#endif

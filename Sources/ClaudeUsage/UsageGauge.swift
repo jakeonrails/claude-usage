@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 
 /// Horizontal usage bar with an optional "you are here" tick line that marks
@@ -118,3 +119,4 @@ struct UsageGauge: View {
         .frame(height: barHeight + labelSpace)
     }
 }
+#endif

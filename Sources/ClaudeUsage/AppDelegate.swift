@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import Combine
 import SwiftUI
@@ -525,3 +526,4 @@ extension AppDelegate: NSMenuDelegate {
         statusItem.menu = nil
     }
 }
+#endif

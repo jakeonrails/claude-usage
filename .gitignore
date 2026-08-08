@@ -23,3 +23,6 @@ docs/nowicki.jpeg
 *.d
 *.o
 *.swiftdeps
+
+# Linux: folder-scoped Swift toolchain (see linux/build.sh)
+.toolchain/

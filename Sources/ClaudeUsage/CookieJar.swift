@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// Persists the Cloudflare `_cfuvid` ("unique visitor") cookie across app
 /// launches. CF sets it as a session cookie (no Expires), so HTTPCookieStorage

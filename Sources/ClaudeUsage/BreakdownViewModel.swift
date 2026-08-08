@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 
 /// Drives `BreakdownView`. Wraps the `UsageBreakdownService` actor: all scans
@@ -76,3 +77,4 @@ final class BreakdownViewModel: ObservableObject {
         state = .loaded(result)
     }
 }
+#endif

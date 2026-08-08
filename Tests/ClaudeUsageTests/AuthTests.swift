@@ -1,5 +1,7 @@
 import XCTest
+#if canImport(CryptoKit)
 import CryptoKit
+#endif
 import Foundation
 @testable import ClaudeUsage
 
@@ -36,6 +38,7 @@ final class AuthTests: XCTestCase {
         XCTAssertEqual(data?.count, 32, "verifier must encode exactly 32 bytes")
     }
 
+    #if canImport(CryptoKit)
     func testPKCEChallengeMathematicallyMatchesSHA256OfVerifier() {
         let pair = PKCEPair.generate()
 
@@ -50,6 +53,7 @@ final class AuthTests: XCTestCase {
         XCTAssertEqual(pair.challenge, expectedChallenge,
                        "challenge must equal base64url(SHA256(verifier.utf8))")
     }
+    #endif
 
     func testPKCEVerifierIsNonEmpty() {
         let pair = PKCEPair.generate()

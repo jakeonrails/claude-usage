@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import Security
 
@@ -13,27 +14,12 @@ enum AppCredentials {
 
     static func load() -> ClaudeCredentials? {
         guard let data = readData() else { return nil }
-        guard let any = try? JSONSerialization.jsonObject(with: data, options: []),
-              let dict = any as? [String: Any],
-              let oauth = dict["claudeAiOauth"] as? [String: Any],
-              let access = oauth["accessToken"] as? String else {
-            return nil
-        }
-        let refresh = oauth["refreshToken"] as? String
-        let expiresAtMs: Int64?
-        if let n = oauth["expiresAt"] as? NSNumber { expiresAtMs = n.int64Value }
-        else if let i = oauth["expiresAt"] as? Int64 { expiresAtMs = i }
-        else if let i = oauth["expiresAt"] as? Int { expiresAtMs = Int64(i) }
-        else { expiresAtMs = nil }
-        return ClaudeCredentials(accessToken: access, refreshToken: refresh, expiresAtMs: expiresAtMs)
+        return ClaudeCredentials(fromCredentialsJSON: data)
     }
 
     static func save(accessToken: String, refreshToken: String?, expiresAtMs: Int64?) throws {
-        var oauth: [String: Any] = ["accessToken": accessToken]
-        if let rt = refreshToken { oauth["refreshToken"] = rt }
-        if let exp = expiresAtMs { oauth["expiresAt"] = NSNumber(value: exp) }
-        let json = try JSONSerialization.data(withJSONObject: ["claudeAiOauth": oauth], options: [])
-        try writeData(json)
+        try writeData(ClaudeCredentials.credentialsJSON(
+            accessToken: accessToken, refreshToken: refreshToken, expiresAtMs: expiresAtMs))
     }
 
     static func clear() {
@@ -83,3 +69,52 @@ enum AppCredentials {
         throw KeychainError.osStatus(updateStatus)
     }
 }
+#else
+import Foundation
+
+/// Linux credential store: a mode-0600 JSON file, the same pattern `gh` and
+/// `aws` use. There is no Keychain here; the Secret Service API exists but
+/// isn't universal (headless boxes, non-KDE/GNOME sessions), so a
+/// permissions-protected file is the portable choice.
+///
+/// Same JSON shape as the macOS keychain item
+/// (`claudeAiOauth.{accessToken,refreshToken,expiresAt}`) so debugging is
+/// symmetric across platforms.
+enum AppCredentials {
+    /// `$XDG_CONFIG_HOME/claude-usage/credentials.json`, defaulting to
+    /// `~/.config/claude-usage/credentials.json`.
+    static var fileURL: URL {
+        let base = ProcessInfo.processInfo.environment["XDG_CONFIG_HOME"]
+            .flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config")
+        return base.appendingPathComponent("claude-usage").appendingPathComponent("credentials.json")
+    }
+
+    static func load() -> ClaudeCredentials? {
+        guard let data = try? Data(contentsOf: fileURL) else { return nil }
+        return ClaudeCredentials(fromCredentialsJSON: data)
+    }
+
+    static func save(accessToken: String, refreshToken: String?, expiresAtMs: Int64?) throws {
+        let data = try ClaudeCredentials.credentialsJSON(
+            accessToken: accessToken, refreshToken: refreshToken, expiresAtMs: expiresAtMs)
+        let fm = FileManager.default
+        let dir = fileURL.deletingLastPathComponent()
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true,
+                               attributes: [.posixPermissions: 0o700])
+        // Write-then-rename so a crash mid-write can't leave a torn file, and
+        // set 0600 before the file holds tokens at its final path.
+        let tmp = dir.appendingPathComponent(".credentials.json.tmp")
+        try data.write(to: tmp)
+        try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: tmp.path)
+        _ = try? fm.removeItem(at: fileURL)
+        try fm.moveItem(at: tmp, to: fileURL)
+    }
+
+    static func clear() {
+        try? FileManager.default.removeItem(at: fileURL)
+    }
+
+    static func hasCredentials() -> Bool { load() != nil }
+}
+#endif

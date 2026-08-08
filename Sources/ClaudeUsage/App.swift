@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 
 @main
@@ -32,3 +33,50 @@ struct ClaudeUsageMain {
         app.run()
     }
 }
+#else
+import Foundation
+
+/// Linux entry point: no GUI in the binary itself — the desktop frontend is
+/// the Plasma widget in linux/plasmoid/, which polls `claude-usage --json`.
+/// The binary provides the shared brains: the cache-first JSON snapshot plus
+/// terminal `connect`/`disconnect` for the OAuth lifecycle.
+@main
+struct ClaudeUsageMain {
+    static func main() {
+        CookieJar.restore()
+
+        // Same headless dispatch as macOS: `--json` prints a snapshot and exits.
+        if let options = CLI.parse(CommandLine.arguments) {
+            CLI.runAndExit(options)
+        }
+
+        let args = Array(CommandLine.arguments.dropFirst())
+        switch args.first {
+        case "connect":
+            ConnectCLI.runAndExit()
+        case "disconnect":
+            AppCredentials.clear()
+            print("Disconnected: credentials cleared.")
+            exit(0)
+        default:
+            FileHandle.standardError.write(Data(linuxHelp.utf8))
+            exit(args.isEmpty ? 0 : 64)
+        }
+    }
+
+    private static let linuxHelp = """
+    claude-usage — Claude plan usage, headless
+
+      claude-usage --json [--max-age <seconds>] [--fresh]
+          Print the latest usage snapshot as JSON (see --help)
+      claude-usage connect
+          Connect your Claude account (OAuth login via your browser)
+      claude-usage disconnect
+          Forget the stored credentials
+
+    The Plasma panel widget in linux/plasmoid/ renders this data in the
+    system tray area; see README for install steps.
+
+    """
+}
+#endif
