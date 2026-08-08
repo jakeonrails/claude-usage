@@ -99,6 +99,10 @@ hour (checker polls hourly).
 
 - Verify the Pages site shows the new version:
   https://jakeonrails.github.io/claude-usage/ (CDN may lag a minute).
+- The `release-linux.yml` workflow fires on publish and attaches the static
+  Linux CLI (`claude-usage-linux-x86_64`) to the release automatically —
+  check the Actions tab if it's missing after a few minutes. Nothing to do
+  locally; the Linux binary is not built on the Mac.
 - If the CLI's flags/output changed this release, update
   `.claude/skills/claude-usage/SKILL.md` — the repo copy is canonical
   (a machine may symlink it into ~/.claude/skills, but that's optional).

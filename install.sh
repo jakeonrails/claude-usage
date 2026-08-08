@@ -4,6 +4,11 @@
 # change.
 set -euo pipefail
 
+# On Linux this installs the CLI symlink + Plasma widget instead.
+if [ "$(uname -s)" != "Darwin" ]; then
+    exec "$(cd "$(dirname "$0")" && pwd)/linux/install.sh" "$@"
+fi
+
 cd "$(dirname "$0")"
 
 APP_NAME="ClaudeUsage"

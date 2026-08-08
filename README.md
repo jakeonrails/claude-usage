@@ -284,11 +284,25 @@ platform-gated out). What you get:
   popover.
 
 ```bash
-linux/install.sh          # downloads a repo-local Swift toolchain to
+./install.sh              # auto-detects Linux and defers to linux/install.sh:
+                          # downloads a repo-local Swift toolchain to
                           # .toolchain/ on first run (~1.5 GB), builds, and
                           # symlinks ~/.local/bin/claude-usage + the widget
 claude-usage connect      # OAuth login: opens browser, paste the code back
 ```
+
+Don't want the toolchain download? Each release has a prebuilt
+`claude-usage-linux-x86_64` attached (fully static, ~60 MB, runs on any
+x86_64 distro — unlike the macOS app there's no signing constraint):
+
+```bash
+curl -fLo ~/.local/bin/claude-usage \
+  https://github.com/jakeonrails/claude-usage/releases/latest/download/claude-usage-linux-x86_64
+chmod +x ~/.local/bin/claude-usage
+```
+
+You still need the repo clone if you want the Plasma widget (it's QML, no
+build required — clone and run `SKIP_BUILD=1 linux/install.sh`).
 
 Then right-click your panel → **Add Widgets** → search "Claude Usage" (restart
 plasmashell first if it doesn't appear:

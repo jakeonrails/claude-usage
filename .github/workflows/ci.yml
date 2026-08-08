@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test-linux:
+    name: swift test (Linux)
+    runs-on: ubuntu-latest
+    # Pinned to the same Swift version linux/build.sh installs, so CI proves
+    # what contributors actually build with.
+    container: swift:6.3.3
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift test
+
+  test-macos:
+    name: swift test (macOS)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift test

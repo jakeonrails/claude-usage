@@ -3,6 +3,11 @@
 # accessory app (LSUIElement). Output: ./ClaudeUsage.app
 set -euo pipefail
 
+# On Linux this repo builds the static CLI + Plasma widget instead.
+if [ "$(uname -s)" != "Darwin" ]; then
+    exec "$(cd "$(dirname "$0")" && pwd)/linux/build.sh" "$@"
+fi
+
 CONFIG="${CONFIG:-release}"
 APP_NAME="ClaudeUsage"
 BUNDLE_ID="com.jakemoffatt.claudeusage"
