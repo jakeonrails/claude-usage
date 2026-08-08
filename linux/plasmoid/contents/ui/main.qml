@@ -221,200 +221,208 @@ PlasmoidItem {
         }
     }
 
-    fullRepresentation: ColumnLayout {
+    fullRepresentation: Item {
         Layout.minimumWidth: Kirigami.Units.gridUnit * 16
         Layout.maximumWidth: Kirigami.Units.gridUnit * 22
-        spacing: Kirigami.Units.smallSpacing
+        implicitWidth: content.implicitWidth + content.anchors.leftMargin + content.anchors.rightMargin
+        implicitHeight: content.implicitHeight
 
-        RowLayout {
-            Layout.fillWidth: true
-            Kirigami.Heading {
-                level: 3
-                text: i18n("Claude Usage")
-                Layout.fillWidth: true
-            }
-            PC3.ToolButton {
-                icon.name: "view-refresh"
-                display: PC3.AbstractButton.IconOnly
-                text: i18n("Refresh")
-                onClicked: root.poll()
-                PC3.ToolTip.text: text
-                PC3.ToolTip.visible: hovered
-            }
-        }
-
-        // Not-connected state: point at the terminal connect flow.
         ColumnLayout {
-            visible: root.notConnected
-            Layout.fillWidth: true
+            id: content
+            anchors.fill: parent
+            anchors.leftMargin: Kirigami.Units.largeSpacing
+            anchors.rightMargin: Kirigami.Units.largeSpacing
             spacing: Kirigami.Units.smallSpacing
-            PC3.Label {
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                text: i18n("Connect your Claude account from a terminal:")
-            }
-            PC3.TextField {
-                Layout.fillWidth: true
-                readOnly: true
-                text: "claude-usage connect"
-                font.family: "monospace"
-            }
-        }
 
-        // Usage sections, one per window the API exposes.
-        Repeater {
-            model: root.report ? [
-                { title: i18n("Session (5h)"),   w: root.report.five_hour },
-                { title: i18n("Weekly"),          w: root.report.seven_day },
-                { title: i18n("Weekly · Fable"),  w: root.report.seven_day_fable },
-                { title: i18n("Weekly · Opus"),   w: root.report.seven_day_opus },
-                { title: i18n("Weekly · Sonnet"), w: root.report.seven_day_sonnet },
-            ].filter(s => s.w !== null && s.w !== undefined) : []
-
-            delegate: ColumnLayout {
-                required property var modelData
+            RowLayout {
                 Layout.fillWidth: true
-                spacing: Kirigami.Units.smallSpacing / 2
-
-                RowLayout {
+                Kirigami.Heading {
+                    level: 3
+                    text: i18n("Claude Usage")
                     Layout.fillWidth: true
-                    PC3.Label {
-                        text: modelData.title
-                        font.bold: true
-                        Layout.fillWidth: true
-                    }
-                    PC3.Label {
-                        text: modelData.w.active
-                            ? i18n("%1% used", Math.round(modelData.w.used_percent))
-                            : i18n("0% used")
-                        color: modelData.w.active
-                            ? root.usageColor(modelData.w.used_percent)
-                            : Kirigami.Theme.disabledTextColor
-                    }
                 }
+                PC3.ToolButton {
+                    icon.name: "view-refresh"
+                    display: PC3.AbstractButton.IconOnly
+                    text: i18n("Refresh")
+                    onClicked: root.poll()
+                    PC3.ToolTip.text: text
+                    PC3.ToolTip.visible: hovered
+                }
+            }
 
-                // Usage bar with a "you are here" time tick, like UsageGauge:
-                // fill ahead of the tick = burning quota faster than the clock.
-                Item {
+            // Not-connected state: point at the terminal connect flow.
+            ColumnLayout {
+                visible: root.notConnected
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
+                PC3.Label {
                     Layout.fillWidth: true
-                    implicitHeight: Math.round(Kirigami.Units.gridUnit / 3)
+                    wrapMode: Text.WordWrap
+                    text: i18n("Connect your Claude account from a terminal:")
+                }
+                PC3.TextField {
+                    Layout.fillWidth: true
+                    readOnly: true
+                    text: "claude-usage connect"
+                    font.family: "monospace"
+                }
+            }
 
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: height / 2
-                        color: Qt.alpha(Kirigami.Theme.textColor, 0.15)
+            // Usage sections, one per window the API exposes.
+            Repeater {
+                model: root.report ? [
+                    { title: i18n("Session (5h)"),   w: root.report.five_hour },
+                    { title: i18n("Weekly"),          w: root.report.seven_day },
+                    { title: i18n("Weekly · Fable"),  w: root.report.seven_day_fable },
+                    { title: i18n("Weekly · Opus"),   w: root.report.seven_day_opus },
+                    { title: i18n("Weekly · Sonnet"), w: root.report.seven_day_sonnet },
+                ].filter(s => s.w !== null && s.w !== undefined) : []
+
+                delegate: ColumnLayout {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    spacing: Kirigami.Units.smallSpacing / 2
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        PC3.Label {
+                            text: modelData.title
+                            font.bold: true
+                            Layout.fillWidth: true
+                        }
+                        PC3.Label {
+                            text: modelData.w.active
+                                ? i18n("%1% used", Math.round(modelData.w.used_percent))
+                                : i18n("0% used")
+                            color: modelData.w.active
+                                ? root.usageColor(modelData.w.used_percent)
+                                : Kirigami.Theme.disabledTextColor
+                        }
                     }
-                    Rectangle {
-                        anchors.left: parent.left
-                        anchors.top: parent.top
-                        anchors.bottom: parent.bottom
-                        radius: height / 2
-                        width: parent.width * Math.min(1, Math.max(0, modelData.w.used_percent / 100))
-                        color: root.usageColor(modelData.w.used_percent)
-                        visible: modelData.w.active
-                    }
-                    // "You are here" time tick, mirroring UsageGauge: overhangs
-                    // the bar and sits on a background-colored halo so it stays
-                    // legible over both the colored fill and the empty track.
-                    Rectangle {
-                        visible: modelData.w.active && modelData.w.elapsed_seconds !== null
-                        width: 8
-                        radius: 2
-                        anchors.top: parent.top
-                        anchors.bottom: parent.bottom
-                        anchors.topMargin: -4
-                        anchors.bottomMargin: -4
-                        x: parent.width * Math.min(1, Math.max(0,
-                            modelData.w.elapsed_seconds / modelData.w.window_seconds)) - 4
-                        color: Kirigami.Theme.backgroundColor
+
+                    // Usage bar with a "you are here" time tick, like UsageGauge:
+                    // fill ahead of the tick = burning quota faster than the clock.
+                    Item {
+                        Layout.fillWidth: true
+                        implicitHeight: Math.round(Kirigami.Units.gridUnit / 3)
 
                         Rectangle {
-                            anchors.centerIn: parent
-                            width: 4
-                            height: parent.height - 2
-                            radius: 1
-                            color: Kirigami.Theme.textColor
+                            anchors.fill: parent
+                            radius: height / 2
+                            color: Qt.alpha(Kirigami.Theme.textColor, 0.15)
                         }
-                    }
-                }
-
-                // Calendar labels under the bar (hours for the session
-                // window, weekdays for weekly ones), like the macOS gauges.
-                Item {
-                    id: marksStrip
-                    property var marks: root.calendarMarks(modelData.w)
-                    visible: marks.length > 0
-                    Layout.fillWidth: true
-                    implicitHeight: visible
-                        ? Kirigami.Units.smallSpacing + Math.round(Kirigami.Theme.smallFont.pointSize * 1.9)
-                        : 0
-
-                    Repeater {
-                        model: marksStrip.marks
-                        delegate: Item {
-                            required property var modelData
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            radius: height / 2
+                            width: parent.width * Math.min(1, Math.max(0, modelData.w.used_percent / 100))
+                            color: root.usageColor(modelData.w.used_percent)
+                            visible: modelData.w.active
+                        }
+                        // "You are here" time tick, mirroring UsageGauge: overhangs
+                        // the bar and sits on a background-colored halo so it stays
+                        // legible over both the colored fill and the empty track.
+                        Rectangle {
+                            visible: modelData.w.active && modelData.w.elapsed_seconds !== null
+                            width: 8
+                            radius: 2
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            anchors.topMargin: -4
+                            anchors.bottomMargin: -4
+                            x: parent.width * Math.min(1, Math.max(0,
+                                modelData.w.elapsed_seconds / modelData.w.window_seconds)) - 4
+                            color: Kirigami.Theme.backgroundColor
 
                             Rectangle {
-                                visible: parent.modelData.hash
-                                width: 1
-                                height: 3
-                                x: marksStrip.width * parent.modelData.frac
-                                y: 0
+                                anchors.centerIn: parent
+                                width: 4
+                                height: parent.height - 2
+                                radius: 1
                                 color: Kirigami.Theme.textColor
-                                opacity: 0.4
-                            }
-                            PC3.Label {
-                                text: parent.modelData.label
-                                font.pointSize: Math.round(Kirigami.Theme.smallFont.pointSize * 0.85)
-                                opacity: 0.55
-                                y: 4
-                                x: Math.min(
-                                    Math.max(0, marksStrip.width * parent.modelData.frac - width / 2),
-                                    marksStrip.width - width)
                             }
                         }
                     }
-                }
 
-                PC3.Label {
-                    text: root.windowSubtitle(modelData.w)
-                    opacity: 0.7
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    // Calendar labels under the bar (hours for the session
+                    // window, weekdays for weekly ones), like the macOS gauges.
+                    Item {
+                        id: marksStrip
+                        property var marks: root.calendarMarks(modelData.w)
+                        visible: marks.length > 0
+                        Layout.fillWidth: true
+                        implicitHeight: visible
+                            ? Kirigami.Units.smallSpacing + Math.round(Kirigami.Theme.smallFont.pointSize * 1.9)
+                            : 0
+
+                        Repeater {
+                            model: marksStrip.marks
+                            delegate: Item {
+                                required property var modelData
+
+                                Rectangle {
+                                    visible: parent.modelData.hash
+                                    width: 1
+                                    height: 3
+                                    x: marksStrip.width * parent.modelData.frac
+                                    y: 0
+                                    color: Kirigami.Theme.textColor
+                                    opacity: 0.4
+                                }
+                                PC3.Label {
+                                    text: parent.modelData.label
+                                    font.pointSize: Math.round(Kirigami.Theme.smallFont.pointSize * 0.85)
+                                    opacity: 0.55
+                                    y: 4
+                                    x: Math.min(
+                                        Math.max(0, marksStrip.width * parent.modelData.frac - width / 2),
+                                        marksStrip.width - width)
+                                }
+                            }
+                        }
+                    }
+
+                    PC3.Label {
+                        text: root.windowSubtitle(modelData.w)
+                        opacity: 0.7
+                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    }
                 }
             }
-        }
 
-        // Extra usage (pay-per-use overflow), when the plan exposes it.
-        RowLayout {
-            visible: root.report !== null && root.report.extra_usage !== null
-                && root.report.extra_usage !== undefined && root.report.extra_usage.enabled === true
-            Layout.fillWidth: true
-            PC3.Label {
-                text: i18n("Extra usage")
-                font.bold: true
+            // Extra usage (pay-per-use overflow), when the plan exposes it.
+            RowLayout {
+                visible: root.report !== null && root.report.extra_usage !== null
+                    && root.report.extra_usage !== undefined && root.report.extra_usage.enabled === true
                 Layout.fillWidth: true
+                PC3.Label {
+                    text: i18n("Extra usage")
+                    font.bold: true
+                    Layout.fillWidth: true
+                }
+                PC3.Label {
+                    text: root.report && root.report.extra_usage
+                          && root.report.extra_usage.used_percent !== null
+                        ? i18n("%1% used", Math.round(root.report.extra_usage.used_percent)) : "—"
+                }
             }
+
+            Kirigami.Separator { Layout.fillWidth: true; visible: !root.notConnected }
+
             PC3.Label {
-                text: root.report && root.report.extra_usage
-                      && root.report.extra_usage.used_percent !== null
-                    ? i18n("%1% used", Math.round(root.report.extra_usage.used_percent)) : "—"
-            }
-        }
-
-        Kirigami.Separator { Layout.fillWidth: true; visible: !root.notConnected }
-
-        PC3.Label {
-            visible: !root.notConnected
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-            opacity: 0.7
-            font.pointSize: Kirigami.Theme.smallFont.pointSize
-            text: {
-                if (root.lastError) return i18n("⚠ %1", root.lastError)
-                if (!root.report) return i18n("Loading…")
-                const age = root.report.age_seconds
-                const src = root.report.source === "api" ? i18n("fetched") : i18n("cached")
-                return i18n("Updated %1 ago (%2)", root.fmtDuration(age), src)
+                visible: !root.notConnected
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                opacity: 0.7
+                font.pointSize: Kirigami.Theme.smallFont.pointSize
+                text: {
+                    if (root.lastError) return i18n("⚠ %1", root.lastError)
+                    if (!root.report) return i18n("Loading…")
+                    const age = root.report.age_seconds
+                    return i18n("Updated %1 ago", root.fmtDuration(age))
+                }
             }
         }
     }
