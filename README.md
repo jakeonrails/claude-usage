@@ -19,7 +19,9 @@ your download, grab both files into the same directory and run:
 shasum -a 256 -c ClaudeUsage-vX.Y.Z.dmg.sha256
 ```
 
-(`ClaudeUsage-vX.Y.Z.dmg: OK` means it matches; substitute the actual version.)
+(`ClaudeUsage-vX.Y.Z.dmg: OK` means it matches; substitute the actual
+version.) See [Security & privacy](#security--privacy) below for what the
+app does — and doesn't do — with your account and your data.
 
 The popover adapts to your macOS version's window styling. On **macOS Tahoe (26)
 and later** (current as of 2026-08-03 — two-icon Refresh + gear footer, 5h
@@ -300,6 +302,64 @@ the button's dialog offers — depends on how the build was made:
 
 Either way it's alert-only: the app never runs git, touches your checkout, or
 replaces itself.
+
+## Security & privacy
+
+**How it talks to Anthropic.** The menubar percentage comes from
+`https://api.anthropic.com/api/oauth/usage` — an internal, undocumented
+endpoint with no public API contract. The app authenticates by reusing the
+same public OAuth `client_id` the official `claude` CLI uses (see
+[How it gets the data](#how-it-gets-the-data)) and presents a `claude-cli/…`
+User-Agent, which is required to pass Anthropic's edge (the default
+`URLSession` UA gets a 403). There's no guarantee Anthropic keeps this
+endpoint stable, accessible, or unchanged going forward — they could alter,
+restrict, or object to this usage at any time, and the app could break
+without notice. By connecting your account you're authorizing a third-party
+app against your Claude account through this unofficial path — go in with
+that understanding.
+
+**What it stores, and where.**
+- OAuth access + refresh tokens (scopes `user:profile user:inference`) in
+  the app's own Keychain item, `ClaudeUsage-credentials`. The app never
+  reads Claude Code's own Keychain item, and `build-app.sh` fails the build
+  if any code touching that item is ever reintroduced (see
+  [Notes](#notes)).
+- `~/Library/Application Support/ClaudeUsage/last_usage.json` — the cached
+  aggregate usage snapshot (percentages, reset times) that both the
+  menubar and `--json` mode read from.
+- `~/Library/Application Support/ClaudeUsage/scan_state.json` and
+  `scan_events.json` — local state for the usage-breakdown window, built by
+  scanning your own `~/.claude/projects` transcripts. These hold per-session
+  token totals, project/`cwd` paths, and a session title per conversation:
+  either Claude Code's own AI-generated title, or — when that's absent — a
+  **cleartext fallback title made from the first ~80 characters of that
+  session's first real user message.** That fallback is the one piece of
+  message content this app ever writes to disk; everything else is
+  aggregate numbers.
+- Logs at `~/Library/Logs/ClaudeUsage/` (`claudeusage.out.log` /
+  `claudeusage.err.log` under the LaunchAgent). No tokens are ever logged.
+
+**What never leaves your machine.** Transcript content itself — your actual
+prompts and Claude's responses — is read locally to compute the breakdown
+and is never uploaded anywhere. The only network traffic is the OAuth login,
+token refreshes, and usage-percentage polling against Anthropic's own API;
+nothing is sent to any third party.
+
+**How to disconnect.** Quit the app, then delete the `ClaudeUsage-credentials`
+item in Keychain Access (search for "ClaudeUsage"). Optionally also delete
+`~/Library/Application Support/ClaudeUsage/` to remove the cached snapshot
+and breakdown state. If you want to fully revoke the app's access rather
+than just deleting the local copy, revoke the grant from your Anthropic
+account (claude.ai → Settings).
+
+**Updates.** `git pull --ff-only && ./install.sh` (the source-build update
+path — see [Updating](#updating)) pulls and rebuilds unreviewed upstream
+code; review the diff before running it if that matters to you. DMG
+releases are self-signed, not notarized by Apple, and publish a SHA-256
+checksum per release so you can at least verify the download wasn't
+tampered with in transit (see [Install](#install)).
+
+See [`SECURITY.md`](SECURITY.md) to report a vulnerability.
 
 ## Cutting a release (maintainers)
 
