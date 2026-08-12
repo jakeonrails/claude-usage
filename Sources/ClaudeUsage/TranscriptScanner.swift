@@ -351,29 +351,80 @@ actor TranscriptScanner {
 /// blobs) is never truncated mid-line. Any trailing partial line at EOF (a
 /// write-in-progress) is left unconsumed — the caller's offset simply stops
 /// before it, so the next scan resumes from the start of that partial line.
-private final class GrowableLineReader {
+///
+/// `maxLineLength` bounds how large that buffer is ever allowed to grow: a
+/// line past the cap (corrupt file, or something writing non-line-oriented
+/// garbage into a `.jsonl`) is discarded rather than buffered without limit.
+///
+/// Not `private` (unlike the rest of this file's scan-internal helpers) so
+/// `TranscriptScannerTests` can drive it directly with an injected cap —
+/// exercising the 10 MB default through the full scan pipeline would mean
+/// writing a multi-megabyte fixture file per test run.
+final class GrowableLineReader {
     private let handle: FileHandle
     private var buffer = Data()
     private let chunkSize = 64 * 1024
+    private let maxLineLength: Int
 
-    init(handle: FileHandle) {
+    init(handle: FileHandle, maxLineLength: Int = 10 * 1024 * 1024) {
         self.handle = handle
+        self.maxLineLength = maxLineLength
     }
 
     /// Returns `(lineBytes, consumedByteCount)` for the next complete line
-    /// (consumed count includes the trailing `\n`), or nil at EOF.
+    /// (consumed count includes the trailing `\n`), or nil at EOF. A line
+    /// longer than `maxLineLength` comes back as an empty `Data()` with
+    /// `consumedByteCount` still covering every discarded byte (including
+    /// the terminating `\n`), so the caller's offset stays correct and
+    /// scanning resumes cleanly at the next line — the caller already skips
+    /// empty lines (`process(line:...)`'s `!lineData.isEmpty` guard), so no
+    /// separate "this was skipped" signal is needed.
     func nextLine() -> (Data, Int)? {
         while true {
             if let newlineIndex = buffer.firstIndex(of: 0x0A) {
-                let line = buffer[buffer.startIndex..<newlineIndex]
                 let consumed = buffer.distance(from: buffer.startIndex, to: newlineIndex) + 1
+                if consumed - 1 > maxLineLength {
+                    // Already fully buffered (arrived in one chunk) but over
+                    // the cap — drop it instead of handing it back.
+                    buffer.removeSubrange(buffer.startIndex...newlineIndex)
+                    return (Data(), consumed)
+                }
+                let line = buffer[buffer.startIndex..<newlineIndex]
                 let result = Data(line)
                 buffer.removeSubrange(buffer.startIndex...newlineIndex)
                 return (result, consumed)
             }
+            if buffer.count > maxLineLength {
+                return skipOversizedLine()
+            }
             let chunk = handle.readData(ofLength: chunkSize)
             if chunk.isEmpty { return nil }
             buffer.append(chunk)
+        }
+    }
+
+    /// `buffer` already exceeds `maxLineLength` with no newline in sight.
+    /// Drop it and keep reading raw chunks — discarding each one immediately
+    /// rather than appending to `buffer` — until a newline turns up, so the
+    /// oversized line is never fully materialized in memory. Any bytes past
+    /// that newline seed `buffer` fresh for the next call.
+    private func skipOversizedLine() -> (Data, Int)? {
+        var discarded = buffer.count
+        buffer.removeAll(keepingCapacity: false)
+        while true {
+            let chunk = handle.readData(ofLength: chunkSize)
+            if chunk.isEmpty {
+                // Still unterminated at EOF — a write-in-progress oversized
+                // line. Leave it unconsumed, same as any other partial
+                // trailing line, so the next scan retries from this offset.
+                return nil
+            }
+            if let newlineIndex = chunk.firstIndex(of: 0x0A) {
+                discarded += chunk.distance(from: chunk.startIndex, to: newlineIndex) + 1
+                buffer = chunk[chunk.index(after: newlineIndex)...]
+                return (Data(), discarded)
+            }
+            discarded += chunk.count
         }
     }
 }

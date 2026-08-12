@@ -334,4 +334,62 @@ final class TranscriptScannerTests: XCTestCase {
         let digest = ScanStore.loadDigest(dir: appSupportDir)
         XCTAssertEqual(digest?.events.count, 1)
     }
+
+    // MARK: - GrowableLineReader (buffer cap)
+
+    /// Writes `content` to a fresh temp file and returns an open read handle,
+    /// tracked in `tempDir` (cleaned up by `tearDown` like every other
+    /// fixture in this file).
+    private func readerFixture(_ content: String) throws -> FileHandle {
+        let file = tempDir.appendingPathComponent("reader-\(UUID().uuidString).jsonl")
+        try content.write(to: file, atomically: true, encoding: .utf8)
+        return try FileHandle(forReadingFrom: file)
+    }
+
+    func testGrowableLineReaderSkipsOversizedLineButParsesSubsequentLines() throws {
+        let oversized = String(repeating: "x", count: 200)
+        let handle = try readerFixture("\(oversized)\nhello\nworld\n")
+        defer { try? handle.close() }
+
+        let reader = GrowableLineReader(handle: handle, maxLineLength: 64)
+
+        // The 200-byte line exceeds the 64-byte cap — discarded, not returned.
+        let (first, _) = try XCTUnwrap(reader.nextLine())
+        XCTAssertTrue(first.isEmpty)
+
+        // Scanning resumes cleanly at the next (normal-length) line.
+        let (second, _) = try XCTUnwrap(reader.nextLine())
+        XCTAssertEqual(String(data: second, encoding: .utf8), "hello")
+
+        let (third, _) = try XCTUnwrap(reader.nextLine())
+        XCTAssertEqual(String(data: third, encoding: .utf8), "world")
+
+        XCTAssertNil(reader.nextLine())
+    }
+
+    func testGrowableLineReaderConsumedByteCountAccountsForDiscardedLine() throws {
+        let oversized = String(repeating: "x", count: 200)
+        let content = "\(oversized)\nhello\n"
+        let handle = try readerFixture(content)
+        defer { try? handle.close() }
+
+        let reader = GrowableLineReader(handle: handle, maxLineLength: 64)
+
+        let (_, firstConsumed) = try XCTUnwrap(reader.nextLine())
+        let (_, secondConsumed) = try XCTUnwrap(reader.nextLine())
+        // consumed byte counts (including each line's trailing \n) must sum
+        // to the full file size — the caller's persisted offset depends on
+        // this staying exact even for a discarded line.
+        XCTAssertEqual(firstConsumed + secondConsumed, content.utf8.count)
+    }
+
+    func testGrowableLineReaderUnderCapReturnsLineUnchanged() throws {
+        let handle = try readerFixture("hello\nworld\n")
+        defer { try? handle.close() }
+
+        let reader = GrowableLineReader(handle: handle, maxLineLength: 64)
+        let (first, consumed) = try XCTUnwrap(reader.nextLine())
+        XCTAssertEqual(String(data: first, encoding: .utf8), "hello")
+        XCTAssertEqual(consumed, 6) // "hello\n"
+    }
 }
