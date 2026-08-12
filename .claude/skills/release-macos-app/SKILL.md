@@ -103,21 +103,31 @@ create-dmg \
   a paired `background@2x.png`) or it renders blurry on retina.
 - Icon size effectively caps at 128.
 - Checkpoint: `hdiutil attach` the DMG, `ls` the volume, detach.
+- Compute a checksum for integrity verification, especially for a
+  self-signed (non-notarized) release where there's no other way for a
+  user to confirm the download wasn't tampered with:
+  `shasum -a 256 "YourApp-vX.Y.Z.dmg" > "YourApp-vX.Y.Z.dmg.sha256"`.
+  Gitignore it alongside the DMG; upload it as a release asset (step 5) and
+  quote the checksum in the release notes.
 
 ## 5. Tag, push, publish
 
 ```bash
 git tag vX.Y.Z && git push && git push origin vX.Y.Z
-gh release create vX.Y.Z YourApp-vX.Y.Z.dmg \
-  --title "YourApp vX.Y.Z" --generate-notes --verify-tag
+gh release create vX.Y.Z YourApp-vX.Y.Z.dmg YourApp-vX.Y.Z.dmg.sha256 \
+  --title "YourApp vX.Y.Z" --generate-notes --verify-tag \
+  --notes "SHA-256: $(shasum -a 256 YourApp-vX.Y.Z.dmg | awk '{print $1}')"
 ```
 
 - `--generate-notes` builds the changelog from commits/PRs since the last
   release; pass `--notes "text"` too and it's prepended.
 - `--fail-on-no-commits` guards against accidental duplicate releases.
+- Attach the `.sha256` file from step 4 as a second release asset, and put
+  the checksum in `--notes` so it's visible without downloading anything.
 - Checkpoint: `gh release view vX.Y.Z` and
   `curl -s https://api.github.com/repos/OWNER/REPO/releases/latest | jq .tag_name`.
-- Don't commit the DMG; gitignore `*-v*.dmg` and create-dmg's `rw.*.dmg` temp.
+- Don't commit the DMG or its checksum; gitignore `*-v*.dmg`,
+  `*-v*.dmg.sha256`, and create-dmg's `rw.*.dmg` temp.
 
 ## 6. Gatekeeper reality (what to tell users, accurate for macOS 15/26)
 

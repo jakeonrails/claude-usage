@@ -12,6 +12,15 @@ yourself with `xattr -cr /Applications/ClaudeUsage.app`). To have it start at
 login, add it under System Settings → General → Login Items. Prefer building
 from source? See [Build](#build) below.
 
+Each release also publishes a `.sha256` checksum alongside the DMG. To verify
+your download, grab both files into the same directory and run:
+
+```bash
+shasum -a 256 -c ClaudeUsage-vX.Y.Z.dmg.sha256
+```
+
+(`ClaudeUsage-vX.Y.Z.dmg: OK` means it matches; substitute the actual version.)
+
 The popover adapts to your macOS version's window styling. On **macOS Tahoe (26)
 and later** (current as of 2026-08-03 — two-icon Refresh + gear footer, 5h
 Session Progress notches on the menubar pill):

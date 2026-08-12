@@ -7,8 +7,9 @@ ClaudeUsage.app/
 .DS_Store
 .env
 
-# Release artifacts (DMGs are published to GitHub Releases, not committed)
+# Release artifacts (DMGs + checksums are published to GitHub Releases, not committed)
 ClaudeUsage-v*.dmg
+ClaudeUsage-v*.dmg.sha256
 rw.*.dmg
 
 # Original uncropped contributor photos (only the *-avatar.jpg crops are published)

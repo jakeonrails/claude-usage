@@ -386,6 +386,7 @@
       <p>Or skip the dialog entirely with one command in Terminal:</p>
       <pre><code>xattr -d com.apple.quarantine /Applications/ClaudeUsage.app</code></pre>
       <p class="why"><strong>Why:</strong> this is an open-source app signed with a local, self-issued certificate rather than a $99/yr Apple Developer ID. The tradeoff buys you a free, transparent build in exchange for one extra click on first launch.</p>
+      <p>Each release also publishes a SHA-256 checksum alongside the DMG — download both and run <code>shasum -a 256 -c ClaudeUsage-vX.Y.Z.dmg.sha256</code> to verify.</p>
     </div>
   </section>
 

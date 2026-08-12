@@ -77,14 +77,33 @@ icon layout in make-dmg.sh changes). The DMG is gitignored — never commit it.
 Checkpoint: `hdiutil attach ClaudeUsage-vX.Y.Z.dmg`, confirm the app +
 Applications link, detach.
 
+Compute a SHA-256 checksum so users can verify the download (the DMG is
+self-signed, not notarized — see CLAUDE.md's Code signing section — so a
+published checksum is the only independent integrity check available):
+
+```bash
+shasum -a 256 ClaudeUsage-vX.Y.Z.dmg > ClaudeUsage-vX.Y.Z.dmg.sha256
+cat ClaudeUsage-vX.Y.Z.dmg.sha256   # e.g. "3f2a...  ClaudeUsage-vX.Y.Z.dmg"
+```
+
+Also gitignored — never commit it; it's uploaded as a release asset in the
+next step instead.
+
 ## 5. Tag, push, publish
 
 ```bash
 git tag vX.Y.Z
 git push && git push origin vX.Y.Z        # pre-push hook runs swift test
-gh release create vX.Y.Z ClaudeUsage-vX.Y.Z.dmg \
-  --title "ClaudeUsage vX.Y.Z" --generate-notes --verify-tag
+CHECKSUM=$(shasum -a 256 ClaudeUsage-vX.Y.Z.dmg | awk '{print $1}')
+gh release create vX.Y.Z ClaudeUsage-vX.Y.Z.dmg ClaudeUsage-vX.Y.Z.dmg.sha256 \
+  --title "ClaudeUsage vX.Y.Z" --generate-notes --verify-tag \
+  --notes "**SHA-256:** \`${CHECKSUM}\`  \`ClaudeUsage-vX.Y.Z.dmg\`
+
+Verify after download: \`shasum -a 256 -c ClaudeUsage-vX.Y.Z.dmg.sha256\`"
 ```
+
+`--notes` text is prepended to the `--generate-notes` changelog, so the
+checksum and verify command land at the top of the release body.
 
 Checkpoint:
 
