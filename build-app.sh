@@ -10,6 +10,19 @@ APP_DIR="${APP_NAME}.app"
 
 cd "$(dirname "$0")"
 
+# Guard against ever again shipping code that reads/writes Claude Code's own
+# Keychain item. The legacy reader (Sources/ClaudeUsage/Keychain.swift's old
+# `enum Keychain`, deleted 2026-08) shelled out to /usr/bin/security against
+# the "Claude Code-credentials" item; this app owns its own credentials now
+# (see AppCredentials.swift) and must never touch Claude Code's. Scoped to
+# Sources/ only — this script's own comments mention the string.
+if grep -rn -e 'Claude Code-credentials' -e '/usr/bin/security' Sources/; then
+  echo "ERROR: found a reference to Claude Code's Keychain item or /usr/bin/security in Sources/." >&2
+  echo "This app must never read or write Claude Code's own Keychain item — it owns its" >&2
+  echo "own credentials (AppCredentials.swift / ClaudeUsage-credentials). Remove the match above." >&2
+  exit 1
+fi
+
 # Commit this build was produced from. Baked into Info.plist (GitCommit) so the
 # running app can ask GitHub whether jakeonrails/claude-usage/main has moved
 # ahead of it (the in-app "update available" check). Empty for non-git builds —
