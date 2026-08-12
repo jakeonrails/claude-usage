@@ -61,9 +61,11 @@ struct PopoverView: View {
             // binary isn't in a signed .app bundle (no Info.plist
             // CFBundleIconFile), so AppKit falls back to the generic app
             // glyph — accepted, it's a dev-only cosmetic gap.
+            // 32pt, not 20: the icns tile carries the macOS icon-grid margins
+            // (~10% per side), so smaller sizes leave the artwork illegibly tiny.
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
-                .frame(width: 20, height: 20)
+                .frame(width: 32, height: 32)
             Text("Claude Code Usage")
                 .font(.headline)
             Spacer()
