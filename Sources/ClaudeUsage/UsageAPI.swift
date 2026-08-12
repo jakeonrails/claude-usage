@@ -92,8 +92,8 @@ enum UsageAPI {
     static private(set) var lastRateLimit: RateLimitInfo?
 
     /// Where diagnostic lines go. The menubar app keeps the default (stdout →
-    /// /tmp/claudeusage.out.log under the LaunchAgent); `--json` mode points
-    /// this at stderr so stdout stays pure JSON.
+    /// ~/Library/Logs/ClaudeUsage/claudeusage.out.log under the LaunchAgent);
+    /// `--json` mode points this at stderr so stdout stays pure JSON.
     static var logHandle: FileHandle = .standardOutput
 
     private static func parseRateLimit(_ http: HTTPURLResponse) -> RateLimitInfo {
@@ -111,7 +111,7 @@ enum UsageAPI {
     }
 
     /// Log every response's rate-limit state so we can see actual budget vs.
-    /// our poll rate in /tmp/claudeusage.{out,err}.log.
+    /// our poll rate in ~/Library/Logs/ClaudeUsage/claudeusage.{out,err}.log.
     private static func logRateLimit(status: Int, info: RateLimitInfo?, http: HTTPURLResponse) {
         let rem = info?.requestsRemaining.map(String.init) ?? "?"
         let lim = info?.requestsLimit.map(String.init) ?? "?"

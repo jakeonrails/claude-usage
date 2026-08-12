@@ -18,7 +18,7 @@ SIGN_IDENTITY="My Cert" ./build-app.sh   # override the default "ClaudeUsage Sel
 SKIP_BUILD=1 ./install.sh                # reinstall an already-built bundle
 ```
 
-Logs (when running under the LaunchAgent): `/tmp/claudeusage.out.log`, `/tmp/claudeusage.err.log`.
+Logs (when running under the LaunchAgent): `~/Library/Logs/ClaudeUsage/claudeusage.out.log`, `~/Library/Logs/ClaudeUsage/claudeusage.err.log`.
 
 ## Architecture
 

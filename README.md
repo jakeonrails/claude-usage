@@ -226,8 +226,10 @@ mv ClaudeUsage.app /Applications/
 
 # Register a per-user LaunchAgent so it starts at login (and auto-restarts
 # on crash, but not when you quit it from the menu).
-mkdir -p ~/Library/LaunchAgents
-cat > ~/Library/LaunchAgents/com.jakemoffatt.claudeusage.plist <<'PLIST'
+mkdir -p ~/Library/LaunchAgents ~/Library/Logs/ClaudeUsage
+# Unquoted heredoc (not <<'PLIST') so $HOME expands below — StandardOutPath/
+# StandardErrorPath need an absolute path, launchd doesn't expand "~".
+cat > ~/Library/LaunchAgents/com.jakemoffatt.claudeusage.plist <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -245,9 +247,9 @@ cat > ~/Library/LaunchAgents/com.jakemoffatt.claudeusage.plist <<'PLIST'
   <key>ProcessType</key>
   <string>Interactive</string>
   <key>StandardOutPath</key>
-  <string>/tmp/claudeusage.out.log</string>
+  <string>${HOME}/Library/Logs/ClaudeUsage/claudeusage.out.log</string>
   <key>StandardErrorPath</key>
-  <string>/tmp/claudeusage.err.log</string>
+  <string>${HOME}/Library/Logs/ClaudeUsage/claudeusage.err.log</string>
 </dict>
 </plist>
 PLIST

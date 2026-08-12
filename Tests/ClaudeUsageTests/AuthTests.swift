@@ -342,8 +342,9 @@ final class AuthTests: XCTestCase {
         let err = OAuth.RefreshError.invalidGrant(#"{"error":"invalid_grant"}"#)
         let desc = err.errorDescription ?? ""
         // The description must read as "revoked / re-auth needed" rather than
-        // a generic HTTP error so the message in /tmp/claudeusage.err.log
-        // explains why credentials were wiped.
+        // a generic HTTP error so the message in
+        // ~/Library/Logs/ClaudeUsage/claudeusage.err.log explains why
+        // credentials were wiped.
         XCTAssertTrue(desc.lowercased().contains("invalid") || desc.lowercased().contains("revoked"))
     }
 }

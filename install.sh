@@ -11,6 +11,7 @@ APP_BUNDLE="${APP_NAME}.app"
 DEST="/Applications/${APP_BUNDLE}"
 LABEL="com.jakemoffatt.claudeusage"
 PLIST="${HOME}/Library/LaunchAgents/${LABEL}.plist"
+LOG_DIR="${HOME}/Library/Logs/ClaudeUsage"
 UID_NUM="$(id -u)"
 
 if [[ "${SKIP_BUILD:-0}" != "1" ]]; then
@@ -66,6 +67,9 @@ fi
 # Start it. Prefer the LaunchAgent if the user has set one up — that way
 # launchd will keep it alive and restart it on crash. Otherwise just open.
 if [[ -f "${PLIST}" ]]; then
+  # The plist's StandardOutPath/StandardErrorPath point here (see README's
+  # Install section) — launchd doesn't reliably create missing parent dirs.
+  mkdir -p "${LOG_DIR}"
   echo "==> bootstrapping LaunchAgent"
   launchctl bootstrap "gui/${UID_NUM}" "${PLIST}"
 else
@@ -78,6 +82,6 @@ sleep 1
 if pgrep -x "${APP_NAME}" >/dev/null 2>&1; then
   echo "==> done — ${APP_NAME} running (pid $(pgrep -x ${APP_NAME}))"
 else
-  echo "WARNING: ${APP_NAME} doesn't appear to be running. Check /tmp/claudeusage.err.log" >&2
+  echo "WARNING: ${APP_NAME} doesn't appear to be running. Check ${LOG_DIR}/claudeusage.err.log" >&2
   exit 1
 fi
