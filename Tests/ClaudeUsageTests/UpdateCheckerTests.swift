@@ -244,6 +244,64 @@ final class UpdateCheckerTests: XCTestCase {
                        "https://github.com/jakeonrails/claude-usage/releases/tag/v1.2.0")
     }
 
+    // MARK: isTrustedDownloadURL — host/scheme allowlist gating NSWorkspace.open
+
+    func testTrustedURLGithubComHttpsPasses() {
+        XCTAssertTrue(UpdateChecker.isTrustedDownloadURL(URL(string: "https://github.com/jakeonrails/claude-usage")!))
+    }
+
+    func testTrustedURLObjectsGithubusercontentComPasses() {
+        XCTAssertTrue(UpdateChecker.isTrustedDownloadURL(
+            URL(string: "https://objects.githubusercontent.com/some-asset")!))
+    }
+
+    func testTrustedURLReleaseAssetsGithubusercontentComPasses() {
+        XCTAssertTrue(UpdateChecker.isTrustedDownloadURL(
+            URL(string: "https://release-assets.githubusercontent.com/some-asset")!))
+    }
+
+    func testTrustedURLHttpFails() {
+        XCTAssertFalse(UpdateChecker.isTrustedDownloadURL(URL(string: "http://github.com/jakeonrails/claude-usage")!))
+    }
+
+    func testTrustedURLEvilComFails() {
+        XCTAssertFalse(UpdateChecker.isTrustedDownloadURL(URL(string: "https://evil.com/ClaudeUsage.dmg")!))
+    }
+
+    func testTrustedURLLookalikeSubdomainFails() {
+        // Exact host match only — a suffix check would let this through.
+        XCTAssertFalse(UpdateChecker.isTrustedDownloadURL(URL(string: "https://github.com.evil.com/ClaudeUsage.dmg")!))
+    }
+
+    func testDownloadURLFromUntrustedDmgAssetIsNil() throws {
+        let json = """
+        {
+          "tag_name": "v1.2.0",
+          "html_url": "https://github.com/jakeonrails/claude-usage/releases/tag/v1.2.0",
+          "assets": [
+            {
+              "name": "ClaudeUsage-v1.2.0.dmg",
+              "browser_download_url": "https://evil.com/ClaudeUsage-v1.2.0.dmg"
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+        let result = try JSONDecoder().decode(UpdateChecker.ReleaseResult.self, from: json)
+        XCTAssertNil(UpdateChecker.downloadURL(from: result))
+    }
+
+    func testDownloadURLFromUntrustedHtmlURLIsNil() throws {
+        let json = """
+        {
+          "tag_name": "v1.2.0",
+          "html_url": "https://evil.com/releases/tag/v1.2.0",
+          "assets": []
+        }
+        """.data(using: .utf8)!
+        let result = try JSONDecoder().decode(UpdateChecker.ReleaseResult.self, from: json)
+        XCTAssertNil(UpdateChecker.downloadURL(from: result))
+    }
+
     // MARK: evaluateRelease — current tag + latest release → alert state
 
     func testEvaluateReleaseAvailableWhenLatestGreaterPrefersDmg() throws {

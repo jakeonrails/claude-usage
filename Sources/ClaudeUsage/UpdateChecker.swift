@@ -109,14 +109,41 @@ final class UpdateChecker: ObservableObject {
         let assets: [ReleaseAsset]
     }
 
+    /// Hosts we'll ever hand to `NSWorkspace.shared.open` for an update
+    /// download. Exact match only — no suffix matching, so an attacker-owned
+    /// `github.com.evil.com` doesn't sneak past a naive `hasSuffix` check.
+    private static let trustedDownloadHosts: Set<String> = [
+        "github.com",
+        "objects.githubusercontent.com",
+        "release-assets.githubusercontent.com",
+    ]
+
+    /// `true` only for an `https` URL whose host is exactly one of the hosts
+    /// GitHub actually serves release pages/assets from. This is the gate
+    /// between anything decoded from the GitHub API response and
+    /// `NSWorkspace.shared.open` — a compromised/spoofed API response can't
+    /// make us open an arbitrary URL.
+    static func isTrustedDownloadURL(_ url: URL) -> Bool {
+        guard url.scheme?.lowercased() == "https",
+              let host = url.host?.lowercased()
+        else { return false }
+        return trustedDownloadHosts.contains(host)
+    }
+
     /// The URL to send the user to for a release-channel update: the first
     /// asset whose name ends in `.dmg`, falling back to the release page.
+    /// Returns nil (treated as "no download available") if the resulting
+    /// URL isn't on `trustedDownloadHosts`.
     static func downloadURL(from result: ReleaseResult) -> URL? {
+        let candidate: URL?
         if let dmgAsset = result.assets.first(where: { $0.name.hasSuffix(".dmg") }),
            let dmgURL = URL(string: dmgAsset.browser_download_url) {
-            return dmgURL
+            candidate = dmgURL
+        } else {
+            candidate = URL(string: result.html_url)
         }
-        return URL(string: result.html_url)
+        guard let url = candidate, isTrustedDownloadURL(url) else { return nil }
+        return url
     }
 
     /// Pure decision: baked release tag + GitHub's latest release → alert
