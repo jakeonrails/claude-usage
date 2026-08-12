@@ -24,8 +24,8 @@ version.) See [Security & privacy](#security--privacy) below for what the
 app does — and doesn't do — with your account and your data.
 
 The popover adapts to your macOS version's window styling. On **macOS Tahoe (26)
-and later** (current as of 2026-08-03 — two-icon Refresh + gear footer, 5h
-Session Progress notches on the menubar pill):
+and later** (current as of 2026-08-12 — app-icon title mark, two-icon Refresh +
+gear footer, 5h Session Progress notches on the menubar pill):
 
 <p>
   <img width="300" alt="Claude Code Usage popover — light mode, macOS Tahoe" src="docs/Light.png" />
@@ -33,8 +33,9 @@ Session Progress notches on the menubar pill):
 </p>
 
 On **macOS Sonoma (14) and Sequoia (15)** (these shots predate the
-calendar-aligned gauge gridlines, edge labels, and the menubar's 5h Session
-Progress notches — they need a Sonoma/Sequoia machine to recapture):
+calendar-aligned gauge gridlines, edge labels, the menubar's 5h Session
+Progress notches, and the app-icon title mark — they need a Sonoma/Sequoia
+machine to recapture):
 
 <p>
   <img width="300" alt="Claude Code Usage popover — light mode, macOS Sonoma" src="docs/Light-Sonoma.png" />
