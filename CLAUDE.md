@@ -53,6 +53,8 @@ A committed **`pre-push` git hook** (`.githooks/pre-push`, activated by `git con
 
 ## Code signing — load-bearing for keychain ACLs
 
+Before signing, `build-app.sh` also copies the committed `assets/icon/AppIcon.icns` into `Contents/Resources/` and sets `CFBundleIconFile` in `Info.plist` so the built `.app` gets its icon. `AppIcon.icns` is generated from `assets/icon/icon.svg` by `scripts/make-icon.sh` (requires `librsvg`, i.e. `brew install librsvg`) — that script isn't part of the normal build, run it manually after editing the SVG and commit the regenerated `.icns`.
+
 `build-app.sh` signs with a stable self-signed identity (default `ClaudeUsage Self-Signed`, overridable via `SIGN_IDENTITY`). **Ad-hoc signing is rejected** by both `build-app.sh` and `install.sh` — every ad-hoc rebuild produces a different cdhash, which appends a stale ACL entry to the `ClaudeUsage-credentials` keychain item and re-prompts the user (and can force a reconnect). The script greps `codesign -dvvv` for `Signature=adhoc` and bails if found.
 
 `SIGN_IDENTITY` lives in `.env` (gitignored — it contains a personal email + Team ID). `build-app.sh` sources `.env` if present. In Conductor workspaces, `bin/conductor-setup` (run via `conductor.json`'s `setup` script) symlinks `.env` from `$CONDUCTOR_ROOT_PATH` so each workspace can sign with the same cert.

@@ -41,6 +41,7 @@ Progress notches — they need a Sonoma/Sequoia machine to recapture):
   <img width="300" alt="Claude Code Usage popover — dark mode, macOS Sonoma" src="docs/Dark-Sonoma.png" />
 </p>
 
+- The popover title is led by the app's icon (an hourglass mark).
 - Menubar text: percentage **used** in your current 5-hour session.
 - Color is a smooth gradient keyed to usage: **green** (0%) → **yellow** (50%)
   → **orange** (70%) → **red** (90%) → **dark red** (100%). The same ramp colors

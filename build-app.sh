@@ -71,6 +71,12 @@ mkdir -p "${APP_DIR}/Contents/Resources"
 
 cp "${BIN_PATH}" "${APP_DIR}/Contents/MacOS/${APP_NAME}"
 
+# App icon. assets/icon/AppIcon.icns is committed (generated from
+# assets/icon/icon.svg via scripts/make-icon.sh — requires librsvg, so it's
+# not part of this build), we just copy it into the bundle and point
+# CFBundleIconFile at it below.
+cp assets/icon/AppIcon.icns "${APP_DIR}/Contents/Resources/AppIcon.icns"
+
 cat >"${APP_DIR}/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -90,6 +96,8 @@ cat >"${APP_DIR}/Contents/Info.plist" <<PLIST
   <string>${VERSION_STRING}</string>
   <key>CFBundleVersion</key>
   <string>1</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
   <key>GitCommit</key>
   <string>${GIT_COMMIT}</string>
 ${RELEASE_TAG_PLIST_ENTRY}  <key>LSMinimumSystemVersion</key>

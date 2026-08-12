@@ -56,7 +56,14 @@ struct PopoverView: View {
     // MARK: Sections
 
     private var header: some View {
-        HStack {
+        HStack(spacing: 6) {
+            // App icon mark leading the title. In `swift run` dev builds the
+            // binary isn't in a signed .app bundle (no Info.plist
+            // CFBundleIconFile), so AppKit falls back to the generic app
+            // glyph — accepted, it's a dev-only cosmetic gap.
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .frame(width: 20, height: 20)
             Text("Claude Code Usage")
                 .font(.headline)
             Spacer()
