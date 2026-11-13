@@ -253,6 +253,13 @@ final class UsageStore: ObservableObject {
         lastSuccess?.response.scopedWeeklyWindow(modelDisplayName: "Fable")
     }
 
+    /// True when the menubar is tracking the weekly window because the plan
+    /// has no 5-hour limit — lets the UI label the progress toggle honestly
+    /// ("Weekly Progress" vs "5h Session Progress").
+    var menubarTracksWeekly: Bool {
+        lastSuccess?.response.menubarWindow()?.isWeekly ?? false
+    }
+
     var lastUpdated: Date? {
         // The displayed numbers come from `lastSuccess`, so "Updated …" should
         // track the last successful fetch — not an error's timestamp.
@@ -265,7 +272,9 @@ final class UsageStore: ObservableObject {
         return nil
     }
 
-    /// Menubar text + NSColor for the 5-hour window.
+    /// Menubar text + NSColor for the tracked window — the 5-hour session on
+    /// session-limited plans, or the weekly window on plans without a 5-hour
+    /// limit (see `UsageResponse.menubarWindow`).
     /// We display percentage USED. For an active window the server may report no
     /// `utilization` until something is consumed; we show that as `0%` rather
     /// than `…`. Color: `0%` uses the system label color so it blends with the
@@ -280,15 +289,15 @@ final class UsageStore: ObservableObject {
     var menubarLabel: (text: String, color: NSColor, filled: Bool) {
         // An active (not-yet-reset) window: show its percentage, treating a
         // missing utilization as 0% used.
-        if let window = fiveHour,
-           let resets = UsageFormat.parseResetsAt(window.resets_at), resets > Date() {
-            let used = max(0, min(100, window.utilization ?? 0))
+        if let tracked = lastSuccess?.response.menubarWindow() {
+            let used = max(0, min(100, tracked.window.utilization ?? 0))
             let rounded = Int(used.rounded())
             if rounded == 0 { return ("0%", .labelColor, false) }
             let text = UsageFormat.menubarActiveText(
                 percent: rounded,
-                resets: resets,
-                showResetTimeAtLimit: showResetTimeAtLimit
+                resets: tracked.resets,
+                showResetTimeAtLimit: showResetTimeAtLimit,
+                coarse: tracked.isWeekly
             )
             return (text, UsageColor.nsColor(forUsed: used), !invertMenubarColors)
         }
@@ -306,14 +315,13 @@ final class UsageStore: ObservableObject {
         return ("…", .secondaryLabelColor, false)
     }
 
-    /// 0–1 fraction of the way through the active 5-hour window; nil when no
-    /// window is active (never connected, between sessions, error states).
+    /// 0–1 fraction of the way through the menubar's tracked window (the
+    /// 5-hour session, or the weekly window on plans without one); nil when
+    /// no window is active (never connected, between sessions, error states).
     /// Drives the menubar time-progress indicator.
     func sessionElapsedFraction(now: Date = Date()) -> Double? {
-        guard let window = fiveHour,
-              let resets = UsageFormat.parseResetsAt(window.resets_at), resets > now
-        else { return nil }
-        return UsageFormat.elapsedFraction(resetsAt: resets, windowDuration: 5 * 3600, now: now)
+        guard let tracked = lastSuccess?.response.menubarWindow(now: now) else { return nil }
+        return UsageFormat.elapsedFraction(resetsAt: tracked.resets, windowDuration: tracked.duration, now: now)
     }
 }
 
@@ -369,14 +377,17 @@ enum UsageFormat {
         return "\(Int(util.rounded()))%"
     }
 
-    /// Menu-bar text for an active (>0%) 5-hour window. Normally the
+    /// Menu-bar text for an active (>0%) tracked window. Normally the
     /// percentage ("57%"), but when the window is maxed (100%) and
-    /// `showResetTimeAtLimit` is on, the countdown to `resets` ("2h 34m")
-    /// instead: at the cap the remaining time is the only actionable number
-    /// left, so "100%" just wastes the slot.
-    static func menubarActiveText(percent: Int, resets: Date, showResetTimeAtLimit: Bool, now: Date = Date()) -> String {
+    /// `showResetTimeAtLimit` is on, the countdown to `resets` instead: at
+    /// the cap the remaining time is the only actionable number left, so
+    /// "100%" just wastes the slot. `coarse` picks day-granular units
+    /// ("4d 2h") for the weekly window, where "100h 23m" would be noise.
+    static func menubarActiveText(percent: Int, resets: Date, showResetTimeAtLimit: Bool, coarse: Bool = false, now: Date = Date()) -> String {
         if percent >= 100, showResetTimeAtLimit {
-            return compactDuration(until: resets, now: now)
+            return coarse
+                ? coarseDuration(until: resets, now: now)
+                : compactDuration(until: resets, now: now)
         }
         return "\(percent)%"
     }

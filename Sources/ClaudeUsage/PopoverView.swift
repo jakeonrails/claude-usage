@@ -25,9 +25,14 @@ struct PopoverView: View {
 
             Divider()
 
-            sessionSection
+            // Plans without a 5-hour session limit (Max 20x "ultra") omit
+            // `five_hour` from the response entirely — hide the section
+            // rather than render a dash with no reset time.
+            if store.fiveHour != nil {
+                sessionSection
 
-            Divider()
+                Divider()
+            }
 
             weeklyAllSection
 
@@ -281,8 +286,8 @@ struct PopoverView: View {
                 .help("Off: solid color block behind the percentage. On: colored text on the bare menu bar.")
             Toggle("Show reset time at 100%", isOn: $store.showResetTimeAtLimit)
                 .help("At 100%, show the time until the session resets (e.g. \"2h 34m\") instead of \"100%\".")
-            Toggle("5h Session Progress", isOn: $store.showSessionProgress)
-                .help("Edge notches on the menubar label marking how far through the 5-hour session window you are.")
+            Toggle(store.menubarTracksWeekly ? "Weekly Progress" : "5h Session Progress", isOn: $store.showSessionProgress)
+                .help("Edge notches on the menubar label marking how far through the current usage window you are.")
             if let update = updateChecker.available {
                 Divider()
                 Button {

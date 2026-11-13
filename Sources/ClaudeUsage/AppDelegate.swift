@@ -238,7 +238,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         resetTime.state = store.showResetTimeAtLimit ? .on : .off
         menu.addItem(resetTime)
         let progress = NSMenuItem(
-            title: "5h Session Progress",
+            title: store.menubarTracksWeekly ? "Weekly Progress" : "5h Session Progress",
             action: #selector(toggleSessionProgress(_:)),
             keyEquivalent: ""
         )
