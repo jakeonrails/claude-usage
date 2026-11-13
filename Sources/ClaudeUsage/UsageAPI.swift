@@ -58,6 +58,35 @@ struct UsageResponse: Decodable {
         }) else { return nil }
         return UsageWindow(utilization: limit.percent, resets_at: limit.resets_at)
     }
+
+    /// The window the menubar tracks, with its parsed reset and span.
+    /// `isWeekly` drives the weekly presentation differences (coarse "4d 2h"
+    /// countdown at 100%, 7-day progress tick).
+    struct MenubarWindow {
+        let window: UsageWindow
+        let resets: Date
+        let duration: TimeInterval
+        let isWeekly: Bool
+    }
+
+    /// Selects the menubar's window. Plans with a 5-hour session limit track
+    /// that window; plans without one (Max 20x "ultra" omits `five_hour` from
+    /// the response entirely) fall back to the weekly all-models window — the
+    /// only limit such plans have. A `five_hour` that is present but already
+    /// reset means "between sessions" on a session-limited plan, not an
+    /// unlimited plan, so it returns nil (rendered as 0%) rather than falling
+    /// back to weekly.
+    func menubarWindow(now: Date = Date()) -> MenubarWindow? {
+        if let window = five_hour {
+            guard let resets = UsageFormat.parseResetsAt(window.resets_at), resets > now
+            else { return nil }
+            return MenubarWindow(window: window, resets: resets, duration: 5 * 3600, isWeekly: false)
+        }
+        guard let window = seven_day,
+              let resets = UsageFormat.parseResetsAt(window.resets_at), resets > now
+        else { return nil }
+        return MenubarWindow(window: window, resets: resets, duration: 7 * 86_400, isWeekly: true)
+    }
 }
 
 enum UsageAPIError: Error, LocalizedError {
